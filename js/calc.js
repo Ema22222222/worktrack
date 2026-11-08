@@ -635,6 +635,40 @@ export function compLedger(state, result, upTo = '9999-12-31') {
   return { rows, balance: bal, granted, used, fromHoliday };
 }
 
+// ---------- Banca de ore extra ----------
+/**
+ * Soldul orelor extra: intră toate orele extra lucrate; ies orele plătite și zilele libere luate din ore extra.
+ * Calcul în ordinea datelor: o zi liberă e acoperită doar de orele strânse până atunci; restul rămâne „neacoperit”.
+ */
+export function otBank(state, result, upTo = '9999-12-31') {
+  const ev = [];
+  for (const c of result.calc.values()) if (c.date <= upTo && c.otMin > 0 && !c.t.open) ev.push({ date: c.date, kind: 'earn', min: c.otMin, ref: c.id });
+  for (const p of (state.otPayments || []).filter(alive)) if (p.date <= upTo) ev.push({ date: p.date, kind: 'paid', min: -(Number(p.minutes) || 0), ref: p.id, month: p.month || null, note: p.note || '' });
+  for (const a of (state.absences || []).filter(alive)) {
+    if ((a.type !== 'recuperare' && a.type !== 'compensatoriu') || a.from > upTo) continue;
+    ev.push({ date: a.from, kind: 'dayoff', min: -(Number(a.minutes) || 0), ref: a.id, note: a.note || '', to: a.to || a.from });
+  }
+  for (const e of (state.compEntries || []).filter(alive)) if (e.date <= upTo) ev.push({ date: e.date, kind: 'adjust', min: Number(e.minutes) || 0, ref: e.id, note: e.note || '' });
+  const order = { earn: 0, adjust: 1, paid: 2, dayoff: 3 };
+  ev.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : order[a.kind] - order[b.kind]));
+  let bal = 0, earned = 0, paid = 0, used = 0;
+  const uncovered = {}, byMonth = {};
+  for (const r of ev) {
+    const m = r.date.slice(0, 7);
+    byMonth[m] = byMonth[m] || { earned: 0, paid: 0 };
+    if (r.kind === 'earn') { earned += r.min; byMonth[m].earned += r.min; }
+    if (r.kind === 'paid') { paid += -r.min; const pm = r.month || m; byMonth[pm] = byMonth[pm] || { earned: 0, paid: 0 }; byMonth[pm].paid += -r.min; }
+    if (r.kind === 'dayoff') {
+      used += -r.min;
+      const need = -r.min; const cov = Math.max(0, Math.min(need, bal));
+      r.covered = cov; r.uncovered = need - cov;
+      if (r.uncovered > 0) uncovered[r.ref] = r.uncovered;
+    }
+    bal += r.min; r.balance = bal;
+  }
+  return { rows: ev, balance: bal, earned, paid, used, uncovered, byMonth };
+}
+
 // ---------- Bani: plăți, confirmări, restanțe ----------
 export function moneySummary(state, result, from, to, filter = {}) {
   const T = totalsFor(result, from, to, filter);

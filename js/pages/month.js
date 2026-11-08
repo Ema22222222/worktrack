@@ -2,10 +2,10 @@
 // pe o zi sau pe mai multe zile deodată. Orele peste normă apar direct ca ore extra.
 import { esc, icon, openDialog, toast, confirmDialog, emptyState } from '../ui.js';
 import { fmtDate, dateRange, monthEnd, dowOf, dayName, monthName, pad, zonedToUtc, toIso, toMs, localTime, localDate, addDays, fmtMoney, uid } from '../util.js';
-import { totalsFor, shiftOverlaps, holidayFor } from '../calc.js';
+import { totalsFor, shiftOverlaps, holidayFor, otBank } from '../calc.js';
 import { freezeRules } from '../actions.js';
 import { editShift, standardFor, editStandard, setupWizard, hmToMin, editPayment } from '../editors.js';
-import { ABSENCE_TYPES } from './leave.js';
+import { ABSENCE_TYPES, editOtPay, dayOffFromOt } from './leave.js';
 import { defaultPlace, bindPlaceChips } from '../places.js';
 import { exportHoja } from '../hoja.js';
 
@@ -96,6 +96,7 @@ export function render(root, app) {
   }
   if (!selecting) root._preselected = false;
   const cur = app.currencyFor(contract?.employerId);
+  const bank = otBank(app.state(), R);
   const hasMoney = T.money.total > 0;
 
   const rowHtml = (d) => {
@@ -108,7 +109,12 @@ export function render(root, app) {
       sub = [x.shifts[0].location?.name, x.br ? `pauză ${fmtHM(x.br)}` : 'fără pauză', x.hol ? `Sărbătoare: ${x.hol.name}` : '', ...x.acts].filter(Boolean).join(' · ');
       hours = `<b>${fmtHM(x.eff)}</b>${x.ot > 0 ? `<em class="extra">+${fmtHM(x.ot)} extra</em>` : ''}`;
     } else if (x.abs.length) {
-      main = esc(ABSENCE_TYPES[x.abs[0].type] || 'Liber'); sub = x.abs[0].note || '';
+      const a0 = x.abs[0];
+      main = esc(ABSENCE_TYPES[a0.type] || 'Liber'); sub = a0.note || '';
+      if ((a0.type === 'recuperare' || a0.type === 'compensatoriu') && a0.minutes) {
+        const unc = bank.uncovered[a0.id];
+        hours = `<b>−${fmtHM(a0.minutes)}</b>${unc ? `<em class="extra" style="background:var(--bad-soft);color:var(--bad)">neacoperită ${fmtHM(unc)}</em>` : '<em class="extra" style="background:var(--ok-soft);color:var(--ok)">din ore extra</em>'}`;
+      }
     } else if (x.hol) {
       main = `<span style="color:var(--holiday)">${esc(x.hol.name)}</span>`; sub = 'Sărbătoare legală';
     } else main = `<span class="t none">${d > today ? '' : dow >= 6 || !std.workDays.includes(dow) ? 'Liber' : 'Necompletat'}</span>`;
@@ -130,7 +136,8 @@ export function render(root, app) {
       <div class="x"><span>Ore extra</span><b>${fmtHM(T.otMin)}</b></div>
     </div>
     ${T.holidayMin || hasMoney ? `<div class="row small muted">${T.holidayMin ? `<span>Lucrat de sărbătoare: <b>${fmtHM(T.holidayMin)}</b></span>` : ''}${hasMoney ? `<span>· Câștig estimat: <b>${fmtMoney(T.money.total, cur)}</b></span>` : ''}</div>` : ''}
-    ${worked && !selecting ? payCard(app, month, days, data, T) : ''}
+    ${!selecting ? `<a class="stdbar" href="#compensatorii" style="text-decoration:none;color:inherit"><span>Sold ore extra (toate lunile): <b style="color:${bank.balance < 0 ? 'var(--bad)' : 'var(--action-ink)'}">${fmtHM(bank.balance)}</b></span><span class="small">Vezi soldul ${icon('chev')}</span></a>` : ''}
+    ${worked && !selecting ? payCard(app, month, days, data, T, bank) : ''}
     <div class="stdbar"><span>Programul tău: <b>${std.start}–${std.end}</b>${std.breakMin ? `, pauză <b>${std.breakStart}–${std.breakEnd}</b>` : ''} · normă <b>${fmtHM(std.normMin)}</b> → zi standard = <b>${fmtHM(buildDay(app, from, std).effMin || 0)}</b></span><button class="btn-sm btn-ghost" id="std">${icon('edit')} Modifică</button></div>
     ${selecting ? '' : `<div class="row"><button class="btn-action" id="fill">${icon('check')} Completează zilele cu programul standard</button></div>`}
     ${selecting || !worked ? '' : `<div class="row"><button class="btn-primary" id="hoja">${icon('dl')} PDF pentru birou (în spaniolă)</button><button class="btn-sm" id="hojax">${icon('dl')} Excel</button></div>`}
@@ -145,6 +152,23 @@ export function render(root, app) {
   root.querySelectorAll('[data-m]').forEach((b) => { b.onclick = () => { app.params = { month: shiftM(+b.dataset.m) }; app.refresh(); }; });
   root.querySelector('#std').onclick = () => editStandard(app);
   root.querySelectorAll('[data-pay]').forEach((b) => { b.onclick = () => { const [k, v] = b.dataset.pay.split(':'); setMonthPay(app, days, data, k, v); }; });
+  root.querySelectorAll('[data-otpay]').forEach((b) => { b.onclick = async () => {
+    const bm = bank.byMonth[month] || { earned: 0, paid: 0 };
+    const mine = app.store.list('otpay').filter((p) => p.month === month);
+    if (b.dataset.otpay === 'part') return editOtPay(app, null, { month, hours: Math.max(0, bm.earned - bm.paid) / 60 });
+    if (b.dataset.otpay === 'all') {
+      const rest = Math.max(0, bm.earned - bm.paid);
+      if (rest > 0) app.store.put('otpay', { minutes: Math.round(rest), month, date: app.today(), note: 'Toate orele extra din lună' }, { action: 'ore extra plătite', undoLabel: 'Ore extra plătite' });
+      setMonthPay(app, days, data, 'ot', 'platit');
+      return;
+    }
+    if (mine.length) {
+      const r = await confirmDialog(`Ștergi plățile de ore extra trecute pentru luna asta (${fmtHM(bm.paid)})? Orele revin în sold.`, { okLabel: 'Da, sunt neplătite' });
+      if (!r) return;
+      for (const p of mine) app.store.remove(p.id, 'Marcat neplătit');
+    }
+    setMonthPay(app, days, data, 'ot', 'asteptare');
+  }; });
   root.querySelector('#addpay')?.addEventListener('click', () => editPayment(app, null, { periodFrom: from, periodTo: to, hours: Math.round((T.effMin - T.otMin) / 6) / 10, otHours: 0 }));
   root.querySelectorAll('[data-payid]').forEach((b) => { b.onclick = () => editPayment(app, b.dataset.payid); });
   root.querySelector('#hoja')?.addEventListener('click', (e) => { e.currentTarget.disabled = true; exportHoja(app, month, 'pdf').finally(() => { const b = root.querySelector('#hoja'); if (b) b.disabled = false; }); });
@@ -179,11 +203,12 @@ function payState(shifts, key, minOf) {
   const unpaid = rel.filter((c) => c.shift.settlement?.[key] === 'asteptare').length;
   return paid === rel.length ? 'paid' : unpaid === rel.length ? 'unpaid' : paid ? 'partial' : 'unset';
 }
-function payCard(app, month, days, data, T) {
+function payCard(app, month, days, data, T, bank) {
   const shifts = days.flatMap((d) => data[d].shifts).filter((c) => !c.t.open);
   const normal = payState(shifts, 'day', (c) => c.t.effMin - c.otMin);
-  const extra = payState(shifts, 'ot', (c) => c.otMin);
-  const unpaidOt = shifts.filter((c) => c.otMin > 0 && !PAID.includes(c.shift.settlement?.ot)).reduce((t, c) => t + c.otMin, 0);
+  const bm = bank.byMonth[month] || { earned: 0, paid: 0 };
+  const unpaidOt = Math.max(0, bm.earned - bm.paid);
+  const extra = !bm.earned ? 'none' : bm.paid >= bm.earned - 0.5 ? 'paid' : bm.paid > 0 ? 'partial' : 'unpaid';
   const from = month + '-01', to = monthEnd(from);
   const pays = app.store.list('payment').filter((p) => (p.periodTo || p.date) >= from && (p.periodFrom || p.date) <= to);
   const lbl = { paid: ['Plătite', 'ok'], unpaid: ['Neplătite', 'bad'], partial: ['Parțial', 'warn'], unset: ['Nemarcat', ''], none: ['—', ''] };
@@ -191,8 +216,9 @@ function payCard(app, month, days, data, T) {
     ${stt === 'none' ? '' : `<div class="seg"><button data-pay="${key}:platit" class="${stt === 'paid' ? 'on' : ''}">Plătite</button><button data-pay="${key}:asteptare" class="${stt === 'unpaid' ? 'on' : ''}">Neplătite</button></div>`}</div>`;
   return `<section class="panel paycard" aria-label="Plata lunii"><header><h2>Plata lunii</h2><button class="btn-sm" id="addpay">${icon('plus')} Sumă primită</button></header>
     ${row('day', 'Ore normale', T.effMin - T.otMin, normal)}
-    ${row('ot', 'Ore extra', T.otMin, extra)}
-    ${unpaidOt > 0 && extra !== 'unset' ? `<p class="note small" style="background:var(--action-soft);border:0;color:var(--action-ink)"><b>${fmtHM(unpaidOt)} ore extra neplătite</b> în această lună.</p>` : ''}
+    <div class="payrow"><div class="grow"><span class="label">Ore extra</span><b>${fmtHM(bm.earned)}</b> <span class="pill ${lbl[extra][1]}">${extra === 'partial' ? `Plătite ${fmtHM(bm.paid)}` : lbl[extra][0]}</span></div>
+      ${extra === 'none' ? '' : `<div class="seg"><button data-otpay="all" class="${extra === 'paid' ? 'on' : ''}" style="${extra === 'paid' ? 'background:var(--ok);color:var(--surface)' : ''}">Plătite</button><button data-otpay="part">Parțial…</button><button data-otpay="none" class="${extra === 'unpaid' ? 'on' : ''}" style="${extra === 'unpaid' ? 'background:var(--bad);color:var(--surface)' : ''}">Neplătite</button></div>`}</div>
+    ${unpaidOt > 0 ? `<p class="note small" style="background:var(--action-soft);border:0;color:var(--action-ink)"><b>${fmtHM(unpaidOt)} ore extra neplătite</b> în această lună – rămân în soldul de ore extra.</p>` : ''}
     ${pays.length ? `<div class="list">${pays.map((p) => `<div class="item click" data-payid="${p.id}"><div class="grow"><b>${fmtMoney(Number(p.amount), p.currency || app.cur)}</b> <span class="small muted">primit ${fmtDate(p.date)}${p.otHours ? ` · ${p.otHours} h extra incluse` : ' · fără ore extra'}${p.note ? ' · ' + esc(p.note) : ''}</span></div>${icon('edit')}</div>`).join('')}</div>` : ''}
   </section>`;
 }
@@ -252,7 +278,7 @@ export async function dayDialog(app, date) {
     <div class="f"><span class="label">Unde ai lucrat?</span><div id="dd-place"></div></div>
     ${acts.length ? `<label class="f">Activitate (opțional)<select id="dd-act"><option value="">—</option>${acts.map((a) => `<option value="${a.id}"${a.id === segAct ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}
     <label class="f">Observații<input type="text" id="dd-note" value="${esc(sh?.notes || '')}"></label>
-    ${sh ? '' : `<div class="row"><span class="small muted">Nu ai lucrat?</span><button class="btn-sm" data-abs="liber">Zi liberă</button><button class="btn-sm" data-abs="concediu">Concediu</button><button class="btn-sm" data-abs="medical">Medical</button></div>`}
+    ${sh ? '' : `<div class="row"><span class="small muted">Nu ai lucrat?</span><button class="btn-sm" id="dd-otoff">Liber din ore extra</button><button class="btn-sm" data-abs="liber">Zi liberă</button><button class="btn-sm" data-abs="concediu">Concediu</button><button class="btn-sm" data-abs="medical">Medical</button></div>`}
     <p class="small" id="dd-err" style="color:var(--bad)" role="alert"></p>`;
   const read = (el) => ({ start: el.querySelector('#dd-s').value, end: el.querySelector('#dd-e').value, breakStart: el.querySelector('#dd-bs').value, breakEnd: el.querySelector('#dd-be').value });
   const preview = (el) => {
@@ -293,6 +319,7 @@ export async function dayDialog(app, date) {
         el.querySelector('#dd-bs').value = std.breakMin ? std.breakStart : ''; el.querySelector('#dd-be').value = std.breakEnd;
         el.querySelector('footer .btn-primary').click();
       });
+      el.querySelector('#dd-otoff')?.addEventListener('click', () => { api.close(null); setTimeout(() => dayOffFromOt(app, date), 0); });
       el.querySelector('#dd-unabs')?.addEventListener('click', () => { for (const a of x.abs) app.store.remove(a.id, 'Eliminat din pontajul lunar'); api.close(null); app.refresh(); });
       el.querySelectorAll('[data-abs]').forEach((b) => { b.onclick = () => {
         app.store.put('absence', { type: b.dataset.abs, from: date, to: date, employerId: contract?.employerId || null, note: '' }, { undoLabel: 'Zi liberă' });

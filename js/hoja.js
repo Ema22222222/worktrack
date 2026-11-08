@@ -6,7 +6,7 @@ import { toPDF, toXLSX } from './export.js';
 
 const DIAS = ['', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
 const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
-const AUS = { concediu: 'VACACIONES', liber: 'LIBRE', absenta: 'AUSENCIA', medical: 'BAJA MÉDICA', sarbatoare: 'FIESTA', recuperare: 'DÍA DE RECUPERACIÓN', compensatoriu: 'DESCANSO COMPENSATORIO' };
+const AUS = { concediu: 'VACACIONES', liber: 'LIBRE', absenta: 'AUSENCIA', medical: 'BAJA MÉDICA', sarbatoare: 'FIESTA', recuperare: 'LIBRE (COMPENSA HORAS EXTRA)', compensatoriu: 'DESCANSO COMPENSATORIO' };
 const PAISES = { ES: 'España', FR: 'Francia', RO: 'Rumanía', PT: 'Portugal', IT: 'Italia', DE: 'Alemania' };
 const h = (min) => round2((min || 0) / 60);
 

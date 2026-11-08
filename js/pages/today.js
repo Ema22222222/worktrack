@@ -1,7 +1,7 @@
 // Pagina „Azi”: ce se întâmplă acum, butoanele de pontaj potrivite momentului, rezumatul lunii.
 import { esc, icon, toast, openDialog, pill } from '../ui.js';
 import { fmtDur, fmtMoney, fmtDate, localTime, localDate, toMs, weekStart, addDays, monthStart, monthEnd, zonedToUtc, fmtNum } from '../util.js';
-import { shiftStatus, totalsFor, validateAction } from '../calc.js';
+import { shiftStatus, totalsFor, validateAction, otBank } from '../calc.js';
 import { startWork, breakStart, breakEnd, switchActivity, endWork, addNote, getLocation, normsFor } from '../actions.js';
 import { setupWizard, editProduction, editShift, standardFor } from '../editors.js';
 import { activeReminders, dismissReminder } from '../reminders.js';
@@ -92,6 +92,7 @@ export function render(root, app) {
       <div><span class="label">Zile lucrate</span><b>${mDays}</b></div>
       <div><span class="label">Ore lucrate</span><b>${fmtHM(M.effMin)}</b></div>
       <div class="x"><span class="label">Ore extra</span><b>${fmtHM(M.otMin)}</b></div>
+      <a href="#compensatorii" style="text-decoration:none;color:inherit;background:var(--action-soft)"><span class="label">Sold ore extra</span><b style="color:var(--action-ink)">${fmtHM(otBank(st, R).balance)}</b><span class="hint">toate lunile ›</span></a>
       ${M.holidayMin ? `<div class="hol"><span class="label">De sărbătoare</span><b>${fmtHM(M.holidayMin)}</b></div>` : ''}
       ${M.money.total ? `<div><span class="label">Câștig estimat</span><b>${fmtMoney(M.money.total, cur)}</b></div>` : ''}
     </div>

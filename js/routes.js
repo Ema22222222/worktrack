@@ -21,7 +21,7 @@ export const ROUTES = {
   productie: { title: 'Producție și norme', short: 'Producție', icon: 'log', render: production.render },
   suplimentare: { title: 'Ore extra (suplimentare)', short: 'Ore extra', icon: 'ot', render: overtime.render },
   sarbatori: { title: 'Sărbători legale', icon: 'star', render: holidays.render },
-  compensatorii: { title: 'Ore compensatorii', icon: 'comp', render: leave.renderComp },
+  compensatorii: { title: 'Sold ore extra', icon: 'comp', render: leave.renderComp },
   concedii: { title: 'Concedii și zile libere', icon: 'leave', render: leave.renderLeave },
   bani: { title: 'Bani și plăți', short: 'Bani', icon: 'money', render: money.render },
   rapoarte: { title: 'Rapoarte și export', icon: 'report', render: reports.render },

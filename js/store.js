@@ -12,12 +12,12 @@ import { uid } from './util.js';
 export const TYPES = {
   employer: 'employers', contract: 'contracts', activity: 'activities', rate: 'rates', policy: 'policies',
   norm: 'norms', shift: 'shifts', production: 'production', holiday: 'holidays', absence: 'absences',
-  comp: 'compEntries', payment: 'payments', confirmation: 'confirmations', expense: 'expenses', location: 'locations',
+  comp: 'compEntries', otpay: 'otPayments', payment: 'payments', confirmation: 'confirmations', expense: 'expenses', location: 'locations',
 };
 export const TYPE_LABEL = {
   employer: 'Angajator', contract: 'Contract', activity: 'Activitate', rate: 'Tarif', policy: 'Reguli program/ore',
   norm: 'Normă producție', shift: 'Zi de lucru', production: 'Producție', holiday: 'Sărbătoare', absence: 'Concediu/absență',
-  comp: 'Ore compensatorii', payment: 'Plată', confirmation: 'Confirmare angajator', expense: 'Cheltuială', location: 'Locație', settings: 'Setări',
+  comp: 'Ajustare sold ore extra', otpay: 'Ore extra plătite', payment: 'Plată', confirmation: 'Confirmare angajator', expense: 'Cheltuială', location: 'Locație', settings: 'Setări',
 };
 const HISTORY_MAX = 60;
 const IGNORE_DIFF = new Set(['history', 'updatedAt', 'rev', 'updatedBy', 'device']);

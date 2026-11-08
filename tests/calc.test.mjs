@@ -1,5 +1,6 @@
 // Teste pentru motorul de calcul. Rulare: node tests/calc.test.mjs
 import {
+  otBank,
   computeAll, totalsFor, compLedger, moneySummary, validateAction, findDuplicatePayment, shiftOverlaps,
   segmentOverlaps, evalNorm, UNCONFIRMED_MSG,
 } from '../js/calc.js';
@@ -285,6 +286,16 @@ t('Extra: sâmbătă și sărbătoare – toate orele extra (ca pe foaia din oct
   st.policies[0].schedule = { ...st.policies[0].schedule, workDays: [1, 2, 3, 4, 5], offDayAllOvertime: true, holidayAllOvertime: true };
   const T = totalsFor(run(st), '2026-10-01', '2026-10-31');
   eq(T.effMin, 16 * 60); eq(T.otMin, 6 * 60);
+});
+
+t('Banca de ore extra: plată parțială, zi liberă acoperită și neacoperită', () => {
+  const st = baseState({ shifts: ['2026-10-05', '2026-10-06', '2026-10-07'].map((d) => shift(d, '08:00', '20:00', { breaks: [['12:00', '13:00']] })) });
+  st.otPayments = [{ id: 'op1', date: '2026-10-31', month: '2026-10', minutes: 60 }];
+  st.absences = [{ id: 'a1', type: 'recuperare', from: '2026-11-03', to: '2026-11-03', minutes: 600 }];
+  const B = otBank(st, run(st));
+  eq(B.earned, 180); eq(B.paid, 60); eq(B.used, 600); eq(B.balance, 180 - 60 - 600);
+  eq(B.uncovered.a1, 480, 'acoperit doar 2h din 10h');
+  eq(B.byMonth['2026-10'].earned, 180); eq(B.byMonth['2026-10'].paid, 60);
 });
 
 for (const [s, m] of results) console.log(s, m);
