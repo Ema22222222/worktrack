@@ -1,6 +1,6 @@
 // sw.js — funcționare offline (cache) și primirea notificărilor push (Firebase Cloud Messaging).
 /* global importScripts, firebase */
-const VERSION = 'wt-v5';
+const VERSION = 'wt-v6';
 const CORE = ['./', './index.html', './css/app.css', './js/web/boot.js', './manifest.webmanifest', './icons/icon-192.png'];
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');

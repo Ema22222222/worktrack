@@ -1,6 +1,7 @@
 // hoja.js — foaia de ore lunară pentru birou, în spaniolă, după modelul foii scrise de mână:
 // Nº · Fecha · Día · Horario · Pausa · Total · Horas extra · Lugar. Totaluri și semnătură.
-import { dateRange, monthEnd, dowOf, localTime, round2, pad } from './util.js';
+import { dateRange, monthEnd, dowOf, localTime, round2, pad, addDays } from './util.js';
+import { otBank } from './calc.js';
 import { formDialog, toast } from './ui.js';
 import { toPDF, toXLSX } from './export.js';
 
@@ -9,6 +10,7 @@ const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', '
 const AUS = { concediu: 'VACACIONES', liber: 'LIBRE', absenta: 'AUSENCIA', medical: 'BAJA MÉDICA', sarbatoare: 'FIESTA', recuperare: 'LIBRE (COMPENSA HORAS EXTRA)', compensatoriu: 'DESCANSO COMPENSATORIO' };
 const PAISES = { ES: 'España', FR: 'Francia', RO: 'Rumanía', PT: 'Portugal', IT: 'Italia', DE: 'Alemania' };
 const h = (min) => round2((min || 0) / 60);
+const fmtN = (v) => Number(v).toLocaleString('es-ES', { maximumFractionDigits: 2 }).replace('-', '−');
 
 export function buildHoja(app, month, { employerId } = {}) {
   const R = app.calc();
@@ -22,7 +24,13 @@ export function buildHoja(app, month, { employerId } = {}) {
     const abs = app.store.list('absence').filter((a) => a.from <= d && (a.to || a.from) >= d && (!employerId || !a.employerId || a.employerId === employerId));
     if (!shifts.length && !abs.length) continue;
     const fecha = `${pad(+d.slice(8))}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
-    if (!shifts.length) { rows.push({ n: ++n, fecha, dia: DIAS[dowOf(d)], horario: AUS[abs[0].type] || 'LIBRE', pausa: '', total: '', extra: '', lugar: '' }); continue; }
+    if (!shifts.length) {
+      const a0 = abs[0];
+      const fromBank = (a0.type === 'recuperare' || a0.type === 'compensatoriu') && Number(a0.minutes) > 0;
+      const horario = fromBank ? `LIBRE – COMPENSA ${fmtN(h(a0.minutes))} h EXTRA` : (AUS[a0.type] || 'LIBRE');
+      rows.push({ n: ++n, fecha, dia: DIAS[dowOf(d)], horario, pausa: '', total: '', extra: '', lugar: '' });
+      continue;
+    }
     const eff = shifts.reduce((t, c) => t + c.t.effMin, 0);
     const ot = shifts.reduce((t, c) => t + c.otMin, 0);
     const br = shifts.reduce((t, c) => t + c.t.breakMin, 0);
@@ -42,7 +50,31 @@ export function buildHoja(app, month, { employerId } = {}) {
     { key: 'pausa', label: 'PAUSA', num: true }, { key: 'total', label: 'TOTAL', num: true }, { key: 'extra', label: 'EXTRA', num: true },
     ...(showPlace ? [{ key: 'lugar', label: 'LUGAR' }] : []),
   ];
-  const fmt = (v) => v.toLocaleString('es-ES', { maximumFractionDigits: 2 });
+  const fmt = fmtN;
+  // Observaciones: doar dacă în lună există zile libere din ore extra, plăți de ore extra sau ajustări.
+  const obs = [];
+  const st = app.state();
+  const B = otBank(st, R, to);
+  const inMonth = (r) => r.date >= from && r.date <= to;
+  const dayoffs = B.rows.filter((r) => r.kind === 'dayoff' && inMonth(r));
+  const paid = B.rows.filter((r) => r.kind === 'paid' && inMonth(r));
+  const adj = B.rows.filter((r) => r.kind === 'adjust' && inMonth(r));
+  if (dayoffs.length || paid.length || adj.length) {
+    const fd = (iso) => `${iso.slice(8)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+    const items = [];
+    for (const r of dayoffs) {
+      const need = -r.min;
+      items.push(r.date + '|' + `• ${fd(r.date)} (${DIAS[dowOf(r.date)].toLowerCase()}): día libre compensado con ${fmt(h(need))} h de horas extra acumuladas${r.uncovered > 0 ? ` (${fmt(h(r.covered))} h cubiertas por el saldo, ${fmt(h(r.uncovered))} h sin cubrir)` : ''}.`);
+    }
+    for (const r of paid) items.push(r.date + '|' + `• ${fd(r.date)}: pagadas ${fmt(h(-r.min))} h extra${r.month ? ` correspondientes a ${MESES[+r.month.slice(5, 7) - 1].toLowerCase()} ${r.month.slice(0, 4)}` : ''}.`);
+    for (const r of adj) items.push(r.date + '|' + `• ${fd(r.date)}: ajuste del saldo ${r.min >= 0 ? '+' : '−'}${fmt(h(Math.abs(r.min)))} h${r.note ? ` (${r.note})` : ''}.`);
+    items.sort();
+    for (const it of items) obs.push(it.slice(11));
+    const prev = otBank(st, R, addDays(from, -1)).balance;
+    const sum = (k) => B.rows.filter((r) => r.kind === k && inMonth(r)).reduce((t, r) => t + r.min, 0);
+    const earned = sum('earn'), used = -sum('dayoff'), payd = -sum('paid'), ad = sum('adjust');
+    obs.push(`Saldo de horas extra: anterior ${fmt(h(prev))} h + generadas este mes ${fmt(h(earned))} h − compensadas con días libres ${fmt(h(used))} h − pagadas ${fmt(h(payd))} h${ad ? ` ${ad >= 0 ? '+' : '−'} ajustes ${fmt(h(Math.abs(ad)))} h` : ''} = ${fmt(h(B.balance))} h pendientes a ${fd(to)}.`);
+  }
   return {
     title: `HOJA DE HORAS · ${MESES[m - 1]} ${y}`,
     headerLines: [
@@ -52,7 +84,9 @@ export function buildHoja(app, month, { employerId } = {}) {
     ],
     subtitle: '', locale: 'es-ES', orientation: 'portrait', fontSize: 9.5, theme: 'grid',
     footer: (p) => `Página ${p}`,
-    summaryLines: [{ text: `TOTAL HORAS EXTRA = ${fmt(h(extMin))} h`, size: 15 }],
+    summaryLines: [{ text: `TOTAL HORAS EXTRA = ${fmt(h(extMin))} h`, size: 15 },
+      ...(obs.length ? [{ text: ' ', size: 4 }, { text: 'OBSERVACIONES', size: 11 }, ...obs.map((t) => ({ text: t, size: 9.5 }))] : [])],
+    observaciones: obs,
     sections: [{ title: 'Horas', sheet: `${MESES[m - 1]} ${y}`, columns, rows,
       totals: { n: '', fecha: 'TOTAL', total: h(totMin), extra: h(extMin) } }],
     totals: { totMin, extMin, rows: rows.length },

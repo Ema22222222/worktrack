@@ -26,6 +26,7 @@ export function toCSV(report) {
     if (sec.totals) lines.push(sec.columns.map((c) => q(sec.totals[c.key])).join(';'));
     lines.push('');
   }
+  for (const l of report.summaryLines || []) if (l.text.trim()) lines.push(q(l.text));
   return '﻿' + lines.join('\r\n');
 }
 
@@ -35,7 +36,8 @@ export async function toXLSX(report) {
   const wb = XLSX.utils.book_new();
   report.sections.forEach((sec, i) => {
     const aoa = [[report.title], [report.subtitle], [], sec.columns.map((c) => c.label), ...sec.rows.map((r) => sec.columns.map((c) => r[c.key] ?? '')),
-      ...(sec.totals ? [sec.columns.map((c) => sec.totals[c.key] ?? '')] : [])];
+      ...(sec.totals ? [sec.columns.map((c) => sec.totals[c.key] ?? '')] : []),
+      ...(i === 0 && report.summaryLines?.length ? [[], ...report.summaryLines.filter((l) => l.text.trim()).map((l) => [l.text])] : [])];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = sec.columns.map((c) => ({ wch: Math.max(10, Math.min(48, c.label.length + 4, c.w || 14)) }));
     XLSX.utils.book_append_sheet(wb, ws, (sec.sheet || sec.title || `Foaia ${i + 1}`).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
@@ -101,7 +103,12 @@ export async function toPDF(report) {
     const H = doc.internal.pageSize.getHeight();
     if (y + report.summaryLines.length * 8 > H - 12) { doc.addPage(); y = 20; }
     doc.setTextColor(20);
-    for (const l of report.summaryLines) { doc.setFontSize(l.size || 11); doc.text(l.text, 14, y); y += (l.size || 11) * 0.5 + 3; }
+    for (const l of report.summaryLines) {
+      const sz = l.size || 11; doc.setFontSize(sz);
+      const lines = doc.splitTextToSize(l.text, W - 28);
+      if (y + lines.length * sz * 0.45 > doc.internal.pageSize.getHeight() - 12) { doc.addPage(); y = 20; }
+      doc.text(lines, 14, y); y += lines.length * sz * 0.45 + 2.5;
+    }
   }
   return doc.output('arraybuffer');
 }
