@@ -2,7 +2,7 @@
 // pe o zi sau pe mai multe zile deodată. Orele peste normă apar direct ca ore extra.
 import { esc, icon, openDialog, toast, confirmDialog, emptyState } from '../ui.js';
 import { fmtDate, dateRange, monthEnd, dowOf, dayName, monthName, pad, zonedToUtc, toIso, toMs, localTime, localDate, addDays, fmtMoney, uid } from '../util.js';
-import { totalsFor, shiftOverlaps } from '../calc.js';
+import { totalsFor, shiftOverlaps, holidayFor } from '../calc.js';
 import { freezeRules } from '../actions.js';
 import { editShift, standardFor, editStandard, setupWizard, hmToMin, editPayment } from '../editors.js';
 import { ABSENCE_TYPES } from './leave.js';
@@ -226,10 +226,20 @@ export async function dayDialog(app, date) {
   const v0 = sh ? { start: localTime(toMs(sh.start), app.tz), end: localTime(toMs(sh.end), app.tz), breakStart: brk ? localTime(toMs(brk.start), app.tz) : '', breakEnd: brk?.end ? localTime(toMs(brk.end), app.tz) : '' }
     : { start: std.start, end: std.end, breakStart: std.breakMin ? std.breakStart : '', breakEnd: std.breakEnd };
   const acts = app.activities();
-  const norm = x.shifts[0]?.dailyNormMin ?? std.normMin;
   let place = sh ? (sh.locationId || sh.startLoc?.locationId || null) : defaultPlace(app);
+  const sched = std.policy?.schedule || {};
+  const ctxFor = (pid) => { const l = pid && app.store.get(pid); return l && l.country ? { ...(contract || {}), country: l.country, region: l.region || '', locality: l.locality || '' } : contract; };
+  const fiestaNow = () => holidayFor(app.state(), ctxFor(place), date);
+  const normNow = () => {
+    const h = fiestaNow();
+    if (h && h.status === 'confirmata' && sched.holidayAllOvertime) return 0;
+    if (!std.workDays.includes(dowOf(date)) && sched.offDayAllOvertime) return 0;
+    return std.normMin;
+  };
+  const fiestaHtml = () => { const h = fiestaNow();
+    return `<button type="button" class="pchip${h ? ' on' : ''}" id="dd-fiesta" aria-pressed="${!!h}">${icon('star')}<span>${h ? esc(h.name) : 'Fiesta / sărbătoare'}<small>${h ? (sched.holidayAllOvertime ? 'toate orele sunt extra · atinge ca să anulezi' : 'zi de sărbătoare · atinge ca să anulezi') : 'atinge dacă azi a fost fiesta'}</small></span></button>`; };
   const body = `
-    ${x.hol ? `<p class="note small" style="background:var(--holiday-soft);border:0">Sărbătoare: <b>${esc(x.hol.name)}</b>. Orele vor fi marcate ca lucrate de sărbătoare.</p>` : ''}
+    <div class="f"><span class="label">Zi de sărbătoare?</span><div id="dd-fiesta-box">${fiestaHtml()}</div></div>
     ${x.abs.length ? `<p class="note info small">Marcat: <b>${esc(ABSENCE_TYPES[x.abs[0].type] || 'liber')}</b>. <button class="btn-sm" id="dd-unabs">Elimină</button></p>` : ''}
     ${sh ? '' : `<button class="btn-action" id="dd-std" style="width:100%;min-height:52px">${icon('check')} Program standard ${std.start}–${std.end}${std.breakMin ? `, pauză ${std.breakStart}–${std.breakEnd}` : ''}</button>`}
     <div class="tgrid">
@@ -250,6 +260,7 @@ export async function dayDialog(app, date) {
     if (!v.start || !v.end) { p.innerHTML = ''; return; }
     const b = buildDay(app, date, v);
     if (b.error) { p.innerHTML = `<div style="grid-column:1/-1"><span class="small" style="color:var(--bad)">${esc(b.error)}</span></div>`; return; }
+    const norm = normNow();
     p.innerHTML = `<div><span class="label">Lucrat</span><b>${fmtHM(b.effMin)}</b></div><div><span class="label">Normă</span><b>${fmtHM(norm)}</b></div><div class="x"><span class="label">Extra</span><b>${fmtHM(Math.max(0, b.effMin - norm))}</b></div>`;
   };
   return openDialog({
@@ -257,7 +268,25 @@ export async function dayDialog(app, date) {
     body,
     onMount: (api) => {
       const el = api.el; preview(el);
-      bindPlaceChips(app, el.querySelector('#dd-place'), place, (id) => { place = id; });
+      const drawFiesta = () => {
+        el.querySelector('#dd-fiesta-box').innerHTML = fiestaHtml();
+        el.querySelector('#dd-fiesta').onclick = async () => {
+          const h = fiestaNow();
+          if (h) {
+            const r = await confirmDialog(`Anulezi sărbătoarea „${esc(h.name)}” din ${fmtDate(date)}?`, { okLabel: 'Anulează sărbătoarea' });
+            if (!r) return;
+            app.store.remove(h.id, 'Anulată din pontajul lunar');
+          } else {
+            const c = ctxFor(place) || {};
+            const where = c.locality || c.region || '';
+            app.store.put('holiday', { date, name: `Fiesta${where ? ' ' + where : ''}`, country: c.country || 'ES', scope: c.locality ? 'local' : c.region ? 'regional' : 'national',
+              region: c.region || '', locality: c.locality || '', status: 'confirmata', source: 'Marcat de tine în pontaj' }, { reason: 'Marcat ca fiesta din pontajul lunar', undoable: false });
+          }
+          drawFiesta(); preview(el);
+        };
+      };
+      drawFiesta();
+      bindPlaceChips(app, el.querySelector('#dd-place'), place, (id) => { place = id; drawFiesta(); preview(el); });
       el.addEventListener('input', () => preview(el));
       el.querySelector('#dd-std')?.addEventListener('click', () => {
         el.querySelector('#dd-s').value = std.start; el.querySelector('#dd-e').value = std.end;
@@ -303,7 +332,8 @@ export async function dayDialog(app, date) {
         app.store.put('shift', patch, { reason: sh ? 'Corectare din pontajul lunar' : 'Adăugat din pontajul lunar', action: sh ? 'corectare' : 'adăugare', undoLabel: 'Zi' });
         for (const a of x.abs) app.store.remove(a.id, 'Înlocuit cu zi lucrată');
         if (place && place !== app.settings().lastLocationId) app.saveSettings({ lastLocationId: place });
-        toast(`${fmtDate(date)}: ${fmtHM(b.effMin)} lucrate${b.effMin > norm ? `, ${fmtHM(b.effMin - norm)} extra` : ''}.`, { undo: () => { app.store.undo(); app.refresh(); } });
+        const nm = normNow();
+        toast(`${fmtDate(date)}: ${fmtHM(b.effMin)} lucrate${b.effMin > nm ? `, ${fmtHM(b.effMin - nm)} extra` : ''}.`, { undo: () => { app.store.undo(); app.refresh(); } });
         app.refresh();
         return true;
       } },
