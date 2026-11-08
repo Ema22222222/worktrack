@@ -92,7 +92,7 @@ export function render(root, app) {
       <div><span class="label">Zile lucrate</span><b>${mDays}</b></div>
       <div><span class="label">Ore lucrate</span><b>${fmtHM(M.effMin)}</b></div>
       <div class="x"><span class="label">Ore extra</span><b>${fmtHM(M.otMin)}</b></div>
-      <a href="#compensatorii" style="text-decoration:none;color:inherit;background:var(--action-soft)"><span class="label">Sold ore extra</span><b style="color:var(--action-ink)">${fmtHM(otBank(st, R).balance)}</b><span class="hint">toate lunile ›</span></a>
+      <div class="x" role="link" tabindex="0" style="cursor:pointer;background:var(--action-soft)" onclick="location.hash='compensatorii'"><span class="label">Sold ore extra</span><b>${fmtHM(otBank(st, R).balance)}</b><span class="hint">toate lunile ›</span></div>
       ${M.holidayMin ? `<div class="hol"><span class="label">De sărbătoare</span><b>${fmtHM(M.holidayMin)}</b></div>` : ''}
       ${M.money.total ? `<div><span class="label">Câștig estimat</span><b>${fmtMoney(M.money.total, cur)}</b></div>` : ''}
     </div>
