@@ -8,7 +8,7 @@ const DRY = process.argv.includes('--dry');
 let admin, db;
 const SITE = process.env.SITE_URL || 'https://ema22222222.github.io/worktrack/';
 const TYPES = { employer: 'employers', contract: 'contracts', activity: 'activities', rate: 'rates', policy: 'policies', norm: 'norms', shift: 'shifts', production: 'production', holiday: 'holidays', absence: 'absences', comp: 'compEntries', payment: 'payments', confirmation: 'confirmations', expense: 'expenses', location: 'locations' };
-const DEF = { enabled: true, startLateMin: 45, breakLongMin: 75, overNorm: true, endLateMin: 60, noProduction: true, incomplete: true, eveningMissing: true };
+const DEF = { enabled: true, startLateMin: 15, breakLongMin: 75, overNorm: true, endLateMin: 15, noProduction: true, incomplete: true, eveningMissing: true };
 
 export function evaluate(state, now) {
   const s = state.settings || {};
@@ -34,7 +34,7 @@ export function evaluate(state, now) {
   if (!open && !todays.length && workday && !absent && !hol) {
     const late = zonedToUtc(today, start, tz) + rc.startLateMin * 60000;
     if (now >= late && now < late + 4 * 3600000) add(`start|${today}`, 'Ai uitat să începi programul?', `Programul tău începe la ${start}. Apasă START sau trece ora corectă.`);
-    const evening = zonedToUtc(today, '21:30', tz);
+    const evening = zonedToUtc(today, end, tz) + 30 * 60000;
     if (rc.eveningMissing && now >= evening && now < evening + 2 * 3600000) add(`missing|${today}`, 'Nu ai trecut ziua de azi', 'Deschide WorkTrack și pune programul de azi (sau marchează zi liberă).');
   }
   if (open) {

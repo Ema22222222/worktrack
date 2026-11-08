@@ -118,7 +118,7 @@ function webSection() {
   const iosHint = w.isIOS && !w.standalone;
   return `<section class="panel"><header><h2>Notificări pe telefon</h2>${w.push.enabled ? pill('Active', 'ok') : pill('Oprite')}</header>
     ${iosHint ? '<p class="note warn small"><b>Pe iPhone</b> notificările merg doar din aplicația de pe ecranul principal: în Safari apasă <b>Partajează</b> → <b>Adaugă pe ecranul principal</b>, deschide WorkTrack de pe ecran și apasă aici „Activează”.</p>' : ''}
-    <p class="small">Primești alertă când ai uitat să începi ziua, să închei pauza sau ziua, când treci de normă și seara dacă nu ai trecut ziua. Verificarea se face automat la fiecare 15–30 de minute, chiar dacă aplicația e închisă.</p>
+    <p class="small">Primești alertă când ai uitat să începi ziua, să închei pauza sau ziua, când treci de normă și seara dacă nu ai trecut ziua. Verificarea se face automat la fiecare câteva minute, chiar dacă aplicația e închisă.</p>
     <div class="row"><button class="btn-action" id="push-on">${w.push.enabled ? 'Reactivează pe acest dispozitiv' : 'Activează notificările'}</button>${w.push.enabled ? '<button id="push-test">Notificare de test</button>' : ''}</div>
     <p class="small" id="push-msg" role="status"></p></section>
   <section class="panel"><header><h2>Contul tău</h2></header>

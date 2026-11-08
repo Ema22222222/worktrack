@@ -9,7 +9,7 @@ import { checkReminders } from './reminders.js';
 export const DEFAULT_SETTINGS = {
   tz: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Madrid'; } catch { return 'Europe/Madrid'; } })(),
   currency: 'EUR', theme: 'auto', activeContractId: null, gps: false, autoBackup: true,
-  reminders: { enabled: true, startLateMin: 45, breakLongMin: 75, overNorm: true, endLateMin: 60, noProduction: true, incomplete: true, paymentsOverdueDays: 45 },
+  reminders: { enabled: true, startLateMin: 15, breakLongMin: 75, overNorm: true, endLateMin: 15, noProduction: true, incomplete: true, paymentsOverdueDays: 45 },
 };
 
 class App {

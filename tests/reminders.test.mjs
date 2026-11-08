@@ -10,12 +10,12 @@ const base = () => ({ settings: { tz: TZ, activeContractId: 'C' }, contracts: [{
 const D = '2026-11-09'; // luni
 const at = (hm, d = D) => zonedToUtc(d, hm, TZ);
 const keys = (st, now) => evaluate(st, now).map((r) => r.key.split('|')[0]);
-t('Nimic dimineața devreme', () => eq(keys(base(), at('08:20')), []));
-t('Ai uitat să începi (08:50)', () => eq(keys(base(), at('08:50')), ['start']));
+t('Nimic dimineața devreme', () => eq(keys(base(), at('08:10')), []));
+t('Ai uitat să începi (08:15)', () => eq(keys(base(), at('08:15')), ['start']));
 t('Weekend: fără reminder de start', () => eq(keys(base(), at('09:00', '2026-11-08')), []));
 t('Concediu: fără reminder', () => { const s = base(); s.absences.push({ from: D, to: D, type: 'concediu' }); eq(keys(s, at('09:00')), []); });
-t('Seara fără zi trecută (21:45)', () => eq(keys(base(), at('21:45')), ['missing']));
+t('Seara fără zi trecută (20:30)', () => eq(keys(base(), at('20:30')), ['missing']));
 t('Pauză uitată', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: null, breaks: [{ id: 'b', start: toIso(at('12:00')), end: null }] }); eq(keys(s, at('13:30')), ['break']); });
-t('Peste normă + uitat să închei', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: null, breaks: [{ id: 'b', start: toIso(at('12:00')), end: toIso(at('13:00')) }] }); eq(keys(s, at('21:10')), ['over', 'end']); });
+t('Peste normă + uitat să închei', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: null, breaks: [{ id: 'b', start: toIso(at('12:00')), end: toIso(at('13:00')) }] }); eq(keys(s, at('20:15')), ['over', 'end']); });
 t('Zi închisă: nimic', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: toIso(at('20:00')), breaks: [] }); eq(keys(s, at('21:45')), []); });
 console.log(`\n${pass} trecute, ${fail} eșuate`); process.exit(fail ? 1 : 0);
