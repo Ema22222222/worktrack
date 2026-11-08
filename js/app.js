@@ -113,7 +113,7 @@ function shellHtml() {
       <div class="brand">${icon('truck')}<span>WORKTRACK<small>Pro Max</small></span></div>
       <div class="sync" id="sync" role="status"></div>
     </header>
-    <nav class="side" aria-label="Meniu">${NAV_GROUPS.map((g) => `<div class="label grp">${esc(g.title)}</div>${g.items.map((k) => { const r = ROUTES[k]; return `<a href="#${k}" data-nav="${k}">${icon(r.icon)}<span>${esc(r.title)}</span></a>`; }).join('')}`).join('')}</nav>
+    <nav class="side" aria-label="Meniu">${(window.wtWeb?.admin ? [{ title: 'Administrare', items: ['utilizatori'] }, ...NAV_GROUPS] : NAV_GROUPS).map((g) => `<div class="label grp">${esc(g.title)}</div>${g.items.map((k) => { const r = ROUTES[k]; return `<a href="#${k}" data-nav="${k}">${icon(r.icon)}<span>${esc(r.title)}</span></a>`; }).join('')}`).join('')}</nav>
     <main class="main" id="main"></main>
     <nav class="bottomnav" aria-label="Navigare rapidă">${NAV_MAIN.map(navLink).join('')}<a href="#mai-mult" data-nav="mai-mult">${icon('more')}<span>Mai mult</span></a></nav>
   </div>`;
