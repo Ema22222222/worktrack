@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WorkTrack Pro Max</title>
+<meta name="description" content="Pontaj zilnic și lunar: ore lucrate, ore extra, sărbători, producție și plăți.">
+<meta name="theme-color" content="#0e382a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WorkTrack">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); color-scheme: light; }
+  body { margin: 0; font: 16px/1.45 "Archivo", system-ui, sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  #boot { display: grid; place-items: center; min-height: 70vh; color: var(--fg-2); padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); text-align: center; }
+</style>
+</head>
+<body>
+<div id="app"><div id="boot"><p>Se încarcă WorkTrack…</p></div></div>
+<noscript><p style="padding:16px">Aplicația are nevoie de JavaScript.</p></noscript>
+<script type="module" src="js/web/boot.js"></script>
+</body>
+</html>
