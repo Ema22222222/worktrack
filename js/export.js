@@ -89,6 +89,7 @@ export async function toPDF(report) {
       footStyles: { fillColor: [232, 238, 233], textColor: 20, fontStyle: 'normal' },
       columnStyles: Object.fromEntries(sec.columns.map((c, i) => [i, c.num ? { halign: 'right' } : {}])),
       margin: { left: 12, right: 12 },
+      didParseCell: (d) => { if (sec.columns[d.column.index]?.num) d.cell.styles.halign = 'right'; },
       didDrawPage: () => {
         doc.setFontSize(7); doc.setTextColor(120);
         doc.text(report.footer ? report.footer(doc.internal.getNumberOfPages()) : `WorkTrack Pro Max · generat ${new Date().toLocaleString('ro-RO')} · pagina ${doc.internal.getNumberOfPages()}`, 12, doc.internal.pageSize.getHeight() - 6);

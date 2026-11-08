@@ -4,6 +4,7 @@ import { fmtDate, localTime, toMs, weekStart, addDays, monthStart, monthEnd, rou
 import { totalsFor, moneySummary, SETTLEMENT, HOLIDAY_MODES, compLedger, evalNorm } from '../calc.js';
 import { COUNTRIES } from '../holidays.js';
 import { toCSV, toXLSX, toPDF } from '../export.js';
+import { exportHoja } from '../hoja.js';
 
 const TYPES = { pontaj: 'Raport de pontaj', suplimentare: 'Raport de ore suplimentare', sarbatori: 'Raport de sărbători', productie: 'Raport de producție', financiar: 'Raport financiar' };
 const h = (min) => round2((min || 0) / 60);
@@ -121,7 +122,14 @@ export function render(root, app) {
   const rep = buildReport(app, st.type, from, to);
   const rows = rep.sections.reduce((t, s) => t + s.rows.length, 0);
   const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}"${String(k) === String(v) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-  root.innerHTML = `<div class="pagehead"><div><h1>Rapoarte și export</h1><p class="sub">Rapoarte cu totaluri, gata de trimis sau păstrat. Export în PDF, Excel sau CSV.</p></div></div>
+  root.innerHTML = `<div class="pagehead"><div><h1>Rapoarte și export</h1><p class="sub">Foaia de ore pentru birou și rapoarte detaliate.</p></div></div>
+  <section class="panel">
+    <header><h2>Foaia de ore pentru birou</h2><span class="pill x">în spaniolă</span></header>
+    <p class="small muted">Ca foaia ta: data, ziua, orarul, pauza, totalul și orele extra, cu TOTAL HORAS EXTRA jos. Merge și pentru luna în curs, cu zilele trecute până acum.</p>
+    <div class="row"><label class="f" style="max-width:220px">Luna<input type="month" id="h-month" value="${st.hojaMonth || app.today().slice(0, 7)}"></label>
+      <button class="btn-action" id="h-pdf" style="align-self:end">${icon('dl')} PDF pentru birou</button><button id="h-xls" style="align-self:end">${icon('dl')} Excel</button></div>
+  </section>
+  <h2 style="margin-top:8px">Rapoarte detaliate</h2>
   <section class="panel"><div class="fgrid">
     <label class="f">Raportul${sel('r-type', Object.entries(TYPES), st.type)}</label>
     <label class="f">Perioada${sel('r-preset', [['zi', 'O zi'], ['saptamana', 'Săptămâna'], ['luna', 'Luna'], ['custom', 'Personalizată']], st.preset)}</label>
@@ -148,7 +156,10 @@ export function render(root, app) {
     st.activityId = root.querySelector('#r-act').value; st.country = root.querySelector('#r-cty').value;
     app.refresh();
   };
-  root.querySelectorAll('select, input').forEach((e) => { e.onchange = upd; });
+  root.querySelectorAll('select, input:not(#h-month)').forEach((e) => { e.onchange = upd; });
+  root.querySelector('#h-month').onchange = (e) => { st.hojaMonth = e.target.value; };
+  root.querySelector('#h-pdf').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; await exportHoja(app, root.querySelector('#h-month').value || app.today().slice(0, 7), 'pdf'); b.disabled = false; };
+  root.querySelector('#h-xls').onclick = () => exportHoja(app, root.querySelector('#h-month').value || app.today().slice(0, 7), 'xlsx');
   root.querySelectorAll('[data-x]').forEach((b) => { b.onclick = async () => {
     const kind = b.dataset.x; const name = `${st.type}-${from}_${to}`;
     b.disabled = true;
