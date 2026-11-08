@@ -45,7 +45,8 @@ export const NAV_GROUPS = [
 ];
 
 function renderMore(root) {
+  const groups = window.wtWeb?.admin ? [{ title: 'Administrare', items: ['utilizatori'] }, ...NAV_GROUPS] : NAV_GROUPS;
   root.innerHTML = `<div class="pagehead"><h1>Mai mult</h1></div>
-  ${NAV_GROUPS.map((g) => `<section class="stack"><div class="label">${esc(g.title)}</div><div class="list">${g.items.map((k) =>
+  ${groups.map((g) => `<section class="stack"><div class="label">${esc(g.title)}</div><div class="list">${g.items.map((k) =>
     `<a class="item click" href="#${k}" style="text-decoration:none;color:inherit">${icon(ROUTES[k].icon)}<div class="grow"><b>${esc(ROUTES[k].title)}</b></div>${icon('chev')}</a>`).join('')}</div></section>`).join('')}`;
 }
