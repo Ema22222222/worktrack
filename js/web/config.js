@@ -10,3 +10,5 @@ export const firebaseConfig = {
 };
 // Cheia publică Web Push (VAPID) din Firebase Cloud Messaging.
 export const VAPID_KEY = 'BDQWLceWl6Wnd_Kp6N9PlgHz2KeuIEM0ehxkFVkbJpXw84fgXjvYlgkiJ3xsfcryl3iVeHevtytn4QSNqJq6oSQ';
+// Administratorul aplicației (contul lui Manuel): aprobă și oprește accesul celorlalți. ID-ul nu este secret.
+export const ADMIN_UIDS = ['Hh3aTZplWmYIiJhpKV5uFCQogyB3'];

@@ -1,8 +1,9 @@
-// send-reminders.mjs — rulează pe GitHub Actions la fiecare 15 minute.
+// send-reminders.mjs — rulează pe GitHub Actions la fiecare 5 minute.
 // Citește pontajul fiecărui utilizator care a activat notificările și trimite alerta potrivită o singură dată.
 // Folosește aceleași calcule ca aplicația (js/calc.js).
 import { computeAll, resolvePolicy, holidayFor } from '../js/calc.js';
 import { localDate, zonedToUtc, dowOf, toMs, fmtDur, localTime } from '../js/util.js';
+import { ADMIN_UIDS } from '../js/web/config.js';
 
 const DRY = process.argv.includes('--dry');
 let admin, db;
@@ -48,6 +49,11 @@ export function evaluate(state, now) {
   return out;
 }
 
+/** Pentru administrator: o notificare pentru fiecare cerere nouă de acces (o singură dată). */
+export function accessRequests(pending) {
+  return pending.map((d) => ({ key: `acces|${d.id}`, title: 'Cerere nouă de acces', body: `${d.get('email') || d.get('name') || 'Cineva'} vrea să folosească WorkTrack. Deschide Utilizatori ca să aprobi sau să refuzi.`, link: '#utilizatori' }));
+}
+
 async function loadState(uid) {
   const snap = await db.collection(`users/${uid}/docs`).get();
   const st = { settings: null }; for (const k of Object.values(TYPES)) st[k] = [];
@@ -70,9 +76,15 @@ async function main() {
     byUser.get(uid).push({ ref: d.ref, token: d.get('token') });
   }
   console.log(`${byUser.size} utilizatori cu notificări active.`);
+  // Acces: doar administratorul și conturile aprobate primesc notificări.
+  const accSnap = await db.collection('access').get();
+  const access = new Map(accSnap.docs.map((d) => [d.id, d.data()]));
+  const pending = accSnap.docs.filter((d) => d.get('status') === 'asteptare');
   for (const [uid, toks] of byUser) {
     const state = await loadState(uid);
-    const rem = evaluate(state, now);
+    const rem = ADMIN_UIDS.includes(uid) ? accessRequests(pending) : [];
+    if (!ADMIN_UIDS.includes(uid) && access.get(uid)?.status !== 'activ') continue;
+    rem.push(...evaluate(state, now));
     if (!rem.length) continue;
     const metaRef = db.doc(`users/${uid}/meta/notify`);
     const sent = (await metaRef.get()).get('sent') || {};
@@ -82,7 +94,7 @@ async function main() {
       if (DRY) continue;
       const res = await admin.messaging().sendEachForMulticast({
         tokens: toks.map((t) => t.token),
-        webpush: { notification: { title: r.title, body: r.body, icon: `${SITE}icons/icon-192.png`, tag: r.key }, fcmOptions: { link: `${SITE}#azi` } },
+        webpush: { notification: { title: r.title, body: r.body, icon: `${SITE}icons/icon-192.png`, tag: r.key }, fcmOptions: { link: `${SITE}${r.link || '#azi'}` } },
       });
       res.responses.forEach((x, i) => {
         const c = x.error?.code || '';

@@ -12,6 +12,7 @@ import * as stats from './pages/stats.js';
 import * as employers from './pages/employers.js';
 import * as expenses from './pages/expenses.js';
 import * as settings from './pages/settings.js';
+import * as users from './pages/users.js';
 import { icon, esc } from './ui.js';
 
 export const ROUTES = {
@@ -30,6 +31,7 @@ export const ROUTES = {
   locatii: { title: 'Locații', icon: 'pin', render: employers.renderLocations },
   cheltuieli: { title: 'Cheltuieli', icon: 'fuel', render: expenses.render },
   setari: { title: 'Setări și backup', icon: 'gear', render: settings.render },
+  utilizatori: { title: 'Utilizatori', icon: 'people', render: users.render },
   istoric: { title: 'Istoric modificări', icon: 'history', render: settings.renderAudit },
   'mai-mult': { title: 'Mai mult', icon: 'more', render: renderMore },
 };

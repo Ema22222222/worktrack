@@ -1,6 +1,6 @@
 // boot.js — versiunea site: logare (Google sau email + parolă), bază de date Firestore cu lucru offline,
 // notificări push, apoi pornește aplicația (aceeași ca în Claude, prin interfața window.claude).
-import { firebaseConfig, VAPID_KEY, FIREBASE_VERSION as V } from './config.js';
+import { firebaseConfig, VAPID_KEY, FIREBASE_VERSION as V, ADMIN_UIDS } from './config.js';
 
 const FB = `https://www.gstatic.com/firebasejs/${V}`;
 const [{ initializeApp }, A, F, M] = await Promise.all([
@@ -159,6 +159,63 @@ const account = {
 
 window.wtWeb = { push, account, isIOS, standalone };
 
+// ---------- acces: doar conturile aprobate de administrator ----------
+const isAdmin = (u) => ADMIN_UIDS.includes(u?.uid);
+const iso = (v) => (v?.toDate ? v.toDate().toISOString() : v || null);
+function accessScreen(user, kind) {
+  document.body.classList.add('auth');
+  const T = {
+    asteptare: ['Contul tău așteaptă aprobarea.', 'Administratorul a primit cererea ta. Aplicația se deschide singură imediat ce ești aprobat – poți lăsa pagina deschisă.'],
+    oprit: ['Accesul tău este oprit.', 'Administratorul aplicației a oprit accesul pentru acest cont.'],
+    offline: ['Fără conexiune la internet.', 'Prima intrare în cont are nevoie de internet. Pagina continuă singură când revine conexiunea.'],
+    eroare: ['Nu am putut verifica accesul.', 'Încearcă din nou peste puțin timp.'],
+  }[kind];
+  root.innerHTML = `<main class="main" style="max-width:480px;padding-block:24px 40px">
+    <section class="hero"><span class="small" style="color:var(--hero-muted);letter-spacing:.12em;font-weight:800">WORKTRACK PRO MAX</span>
+      <h1 style="font-size:1.8rem">${T[0]}</h1><p style="color:var(--hero-muted)">${T[1]}</p></section>
+    <section class="panel"><p class="small">Conectat ca <b>${esc(user.email || user.displayName || '')}</b></p>
+      <div class="row"><button id="out">Ieși din cont</button>${kind === 'eroare' ? '<button id="re">Încearcă din nou</button>' : ''}</div></section></main>`;
+  root.querySelector('#out').onclick = async () => { await A.signOut(auth); location.reload(); };
+  root.querySelector('#re')?.addEventListener('click', () => location.reload());
+}
+async function lockOut() {
+  // Accesul a fost oprit cât timp aplicația era deschisă: ștergem copia locală și repornim (apare ecranul „oprit”).
+  try { await F.terminate(fs); await F.clearIndexedDbPersistence(fs); } catch { /* ignorat */ }
+  location.reload();
+}
+function gate(user) {
+  return new Promise((resolve) => {
+    if (isAdmin(user)) { resolve(); return; }
+    const ref = F.doc(fs, 'access', user.uid);
+    let allowed = false, creating = false, seen = false;
+    F.onSnapshot(ref, { includeMetadataChanges: true }, async (snap) => {
+      const st = snap.exists() ? snap.get('status') : null;
+      if (st === 'activ') {
+        if (!seen && !snap.metadata.fromCache) { seen = true; F.updateDoc(ref, { lastSeen: F.serverTimestamp(), email: user.email || '', name: user.displayName || '' }).catch(() => {}); }
+        if (!allowed) { allowed = true; resolve(); }
+        return;
+      }
+      if (allowed) { if (!snap.metadata.fromCache) lockOut(); return; }
+      if (!snap.exists()) {
+        if (snap.metadata.fromCache) { if (navigator.onLine === false) accessScreen(user, 'offline'); return; }
+        if (creating) return;
+        creating = true;
+        try { await F.setDoc(ref, { email: user.email || '', name: user.displayName || '', status: 'asteptare', createdAt: F.serverTimestamp() }); }
+        catch (e) { console.warn('access', e); accessScreen(user, 'eroare'); }
+        return;
+      }
+      accessScreen(user, st === 'oprit' ? 'oprit' : 'asteptare');
+    }, (e) => { if (allowed) lockOut(); else { console.warn('access', e); accessScreen(user, 'eroare'); } });
+  });
+}
+const admin = {
+  watch(cb) {
+    return F.onSnapshot(F.collection(fs, 'access'), (snap) => cb(snap.docs.map((d) => ({ uid: d.id, ...d.data(), createdAt: iso(d.get('createdAt')), lastSeen: iso(d.get('lastSeen')), changedAt: iso(d.get('changedAt')) }))), (e) => cb(null, e));
+  },
+  setStatus(uid, status) { return F.updateDoc(F.doc(fs, 'access', uid), { status, changedAt: F.serverTimestamp() }); },
+  remove(uid) { return F.deleteDoc(F.doc(fs, 'access', uid)); },
+};
+
 // ---------- pornire ----------
 let started = false;
 A.getRedirectResult(auth).catch(() => {});
@@ -166,6 +223,9 @@ A.onAuthStateChanged(auth, async (user) => {
   if (!user) { if (started) location.reload(); else loginScreen(); return; }
   if (started) return;
   started = true;
+  root.innerHTML = '<div id="boot"><p>Se verifică accesul…</p></div>';
+  await gate(user);
+  window.wtWeb.admin = isAdmin(user) ? admin : null;
   document.body.classList.remove('auth');
   const shim = {
     db: makeDb(user.uid),

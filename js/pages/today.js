@@ -16,8 +16,15 @@ export function render(root, app) {
       <span class="label hmuted" style="color:var(--hero-muted)">WorkTrack Pro Max</span>
       <h1 style="font-size:2rem">Orele tale, exact cum le-ai lucrat.</h1>
       <p class="hmuted">Pontaj zilnic sau lunar, ore extra, sărbători, producție și bani. Fără date inventate: aplicația pornește goală.</p>
-      <button class="go" id="setup">${icon('play')} ÎNCEPE CONFIGURAREA</button></section>`;
+      <button class="go" id="setup">${icon('play')} ÎNCEPE CONFIGURAREA</button></section>
+      <section class="panel"><h2>Vrei doar să vezi cum merge?</h2>
+      <p class="small">Încarcă o lună de exemplu: zile lucrate, o fiesta, o sâmbătă, o zi liberă din ore extra și o plată de ore extra. Le ștergi oricând din Setări, dintr-un buton.</p>
+      <div class="row"><button id="demo">Încarcă date de exemplu</button></div></section>`;
     root.querySelector('#setup').onclick = () => setupWizard(app);
+    root.querySelector('#demo').onclick = async () => {
+      const { loadDemo } = await import('../demo.js');
+      if (loadDemo(app)) { toast('Date de exemplu încărcate. Uită-te prin „Luna”, „Sold ore extra” și „Rapoarte”.', { ms: 7000 }); app.go('luna'); }
+    };
     return;
   }
   const st = app.state();

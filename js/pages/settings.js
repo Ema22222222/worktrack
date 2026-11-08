@@ -5,6 +5,7 @@ import { TYPE_LABEL, auditLog, stripHistory } from '../store.js';
 import { downloadBackup, restoreFrom, readJsonFile, listLocal, getLocal } from '../backup.js';
 import { CURRENCIES } from '../editors.js';
 import { getLocation } from '../actions.js';
+import { hasDemo, removeDemo } from '../demo.js';
 
 const TZS = ['Europe/Madrid', 'Atlantic/Canary', 'Europe/Paris', 'Europe/Bucharest', 'Europe/Lisbon', 'Europe/London', 'Europe/Rome', 'Europe/Berlin', 'Europe/Vienna', 'Europe/Brussels', 'Europe/Zurich', 'Europe/Warsaw', 'Europe/Chisinau', 'UTC'];
 
@@ -38,6 +39,9 @@ export function render(root, app) {
       <label class="btn" style="cursor:pointer">${icon('ul')} Restaurează din fișier<input type="file" id="ul" accept="application/json,.json" hidden></label></div>
     <label class="chk"><input type="checkbox" id="auto" ${s.autoBackup ? 'checked' : ''}> Copie automată zilnică pe acest dispozitiv (ultimele 7)</label>
     <div id="locals" class="stack"></div></section>
+  ${hasDemo(app) ? `<section class="panel"><header><h2>Date de exemplu</h2>${pill('Încărcate', 'warn')}</header>
+    <p class="small">Contul conține date de exemplu (Firma Demo). Când vrei să-ți treci orele tale, șterge-le de aici.</p>
+    <div class="row"><button class="btn-danger" id="demo-rm">Șterge datele de exemplu</button></div></section>` : ''}
   <section class="panel"><h2>Istoric și date șterse</h2><p class="small">Toate modificările păstrează valoarea veche, data, motivul și autorul.</p><div class="row"><a class="btn" href="#istoric">${icon('history')} Deschide istoricul</a></div></section>`;
 
   if (window.wtWeb) bindWeb(root, app);
@@ -57,6 +61,7 @@ export function render(root, app) {
   root.querySelector('#rem').onclick = () => editReminders(app);
   root.querySelector('#notif')?.addEventListener('click', async () => { try { await Notification.requestPermission(); } catch { /* refuzat */ } app.refresh(); });
   root.querySelector('#sync').onclick = async () => { app.store.setOnline(navigator.onLine !== false); await app.store.flush(); toast(app.store.status.pending ? 'Încă sunt înregistrări în așteptare (fără conexiune).' : 'Totul este sincronizat.'); app.refresh(); };
+  root.querySelector('#demo-rm')?.addEventListener('click', () => removeDemo(app));
   root.querySelector('#dl').onclick = () => downloadBackup(app);
   root.querySelector('#ul').onchange = async (e) => { const f = e.target.files?.[0]; if (!f) return; try { await restoreFrom(app, await readJsonFile(f)); } catch (err) { toast(err.message, { bad: true }); } e.target.value = ''; };
   root.querySelector('#auto').onchange = (e) => save({ autoBackup: e.target.checked });
@@ -116,7 +121,10 @@ export function renderAudit(root, app) {
 function webSection() {
   const w = window.wtWeb; const a = w.account;
   const iosHint = w.isIOS && !w.standalone;
-  return `<section class="panel"><header><h2>Notificări pe telefon</h2>${w.push.enabled ? pill('Active', 'ok') : pill('Oprite')}</header>
+  return `${w.admin ? `<section class="panel"><header><h2>Utilizatori</h2>${pill('Administrator', 'ok')}</header>
+    <p class="small">Aprobi cine poate folosi aplicația și oprești accesul oricui, oricând.</p>
+    <div class="row"><a class="btn btn-primary" href="#utilizatori">${icon('people')} Deschide utilizatorii</a></div></section>` : ''}
+  <section class="panel"><header><h2>Notificări pe telefon</h2>${w.push.enabled ? pill('Active', 'ok') : pill('Oprite')}</header>
     ${iosHint ? '<p class="note warn small"><b>Pe iPhone</b> notificările merg doar din aplicația de pe ecranul principal: în Safari apasă <b>Partajează</b> → <b>Adaugă pe ecranul principal</b>, deschide WorkTrack de pe ecran și apasă aici „Activează”.</p>' : ''}
     <p class="small">Primești alertă când ai uitat să începi ziua, să închei pauza sau ziua, când treci de normă și seara dacă nu ai trecut ziua. Verificarea se face automat la fiecare câteva minute, chiar dacă aplicația e închisă.</p>
     <div class="row"><button class="btn-action" id="push-on">${w.push.enabled ? 'Reactivează pe acest dispozitiv' : 'Activează notificările'}</button>${w.push.enabled ? '<button id="push-test">Notificare de test</button>' : ''}</div>
