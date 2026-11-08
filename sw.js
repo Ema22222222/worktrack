@@ -1,6 +1,6 @@
 // sw.js — funcționare offline (cache) și primirea notificărilor push (Firebase Cloud Messaging).
 /* global importScripts, firebase */
-const VERSION = 'wt-v3';
+const VERSION = 'wt-v4';
 const CORE = ['./', './index.html', './css/app.css', './js/web/boot.js', './manifest.webmanifest', './icons/icon-192.png'];
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
@@ -37,7 +37,7 @@ self.addEventListener('fetch', (e) => {
   if (/googleapis\.com$/.test(url.hostname) && !/fonts\.googleapis\.com$/.test(url.hostname)) return;
   if (url.hostname.endsWith('firebaseapp.com') || url.hostname.endsWith('google.com')) return;
   if (url.origin === self.location.origin) {
-    e.respondWith(fetch(req).then((res) => {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
