@@ -31,6 +31,7 @@ export function evaluate(state, now) {
   const hol = holidayFor(state, contract, today);
   const out = [];
   const add = (key, title, body) => out.push({ key, title, body });
+  if (process.env.WT_DEBUG) console.log('diagnostic', JSON.stringify({ today, ora: localTime(now, tz), tz, zi_de_lucru: workday, ture_azi: todays.length, tura_deschisa: !!open, absent, sarbatoare: !!hol, start, end }));
 
   if (!open && !todays.length && workday && !absent && !hol) {
     const late = zonedToUtc(today, start, tz) + rc.startLateMin * 60000;
