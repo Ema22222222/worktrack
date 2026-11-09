@@ -5,7 +5,7 @@ const TZ = 'Europe/Madrid';
 let pass = 0, fail = 0;
 const t = (n, f) => { try { f(); pass++; console.log('OK  ', n); } catch (e) { fail++; console.log('FAIL', n, '→', e.message); } };
 const eq = (a, b) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`așteptat ${JSON.stringify(b)}, primit ${JSON.stringify(a)}`); };
-const base = () => ({ settings: { tz: TZ, activeContractId: 'C' }, contracts: [{ id: 'C', employerId: 'E', country: 'ES' }], policies: [{ id: 'P', contractId: 'C', validFrom: '2000-01-01', schedule: { dailyNormMin: 600, usualStart: '08:00', usualEnd: '20:00', workDays: [1, 2, 3, 4, 5] }, ot: { mode: 'unconfirmed' } }],
+const base = () => ({ settings: { tz: TZ, activeContractId: 'C' }, contracts: [{ id: 'C', employerId: 'E', country: 'ES' }], policies: [{ id: 'P', contractId: 'C', validFrom: '2000-01-01', schedule: { dailyNormMin: 600, usualStart: '08:00', usualEnd: '20:00', breakStart: '12:00', breakMin: 60, workDays: [1, 2, 3, 4, 5] }, ot: { mode: 'unconfirmed' } }],
   shifts: [], absences: [], holidays: [], rates: [], norms: [], production: [], employers: [], activities: [], locations: [], compEntries: [], payments: [], confirmations: [], expenses: [] });
 const D = '2026-11-09'; // luni
 const at = (hm, d = D) => zonedToUtc(d, hm, TZ);
@@ -18,4 +18,14 @@ t('Seara fără zi trecută (20:30)', () => eq(keys(base(), at('20:30')), ['miss
 t('Pauză uitată', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: null, breaks: [{ id: 'b', start: toIso(at('12:00')), end: null }] }); eq(keys(s, at('13:30')), ['break']); });
 t('Peste normă + uitat să închei', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: null, breaks: [{ id: 'b', start: toIso(at('12:00')), end: toIso(at('13:00')) }] }); eq(keys(s, at('20:15')), ['over', 'end']); });
 t('Zi închisă: nimic', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: toIso(at('20:00')), breaks: [] }); eq(keys(s, at('21:45')), []); });
+const open = (brk) => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: null, breaks: brk || [] }); return s; };
+t('Zi pornită, 11:55: nimic', () => eq(keys(open(), at('11:55')), []));
+t('Zi pornită, 12:00 fără pauză: „ora pauzei”', () => eq(keys(open(), at('12:00')), ['pauza']));
+t('Pauza deja pornită la 12:00: fără „ora pauzei”', () => eq(keys(open([{ id: 'b', start: toIso(at('12:00')), end: null }]), at('12:05')), []));
+t('Pauză pornită 12:00, la 13:00: „Gata pauza?”', () => eq(keys(open([{ id: 'b', start: toIso(at('12:00')), end: null }]), at('13:00')), ['break']));
+t('Pauză pornită 12:00, la 12:55: nimic', () => eq(keys(open([{ id: 'b', start: toIso(at('12:00')), end: null }]), at('12:55')), []));
+t('Pauză încheiată, 15:00: nimic', () => eq(keys(open([{ id: 'b', start: toIso(at('12:00')), end: toIso(at('13:00')) }]), at('15:00')), []));
+t('Fără pauză în program: nu întreabă de pauză', () => { const s = open(); s.policies[0].schedule.breakMin = 0; eq(keys(s, at('12:30')), []); });
+t('Pauza dezactivată din setări', () => { const s = open(); s.settings.reminders = { breakPrompt: false }; eq(keys(s, at('12:30')), []); });
+t('Zi completată dimineața (închisă): nimic toată ziua', () => { const s = base(); s.shifts.push({ id: 'S', employerId: 'E', contractId: 'C', start: toIso(at('08:00')), end: toIso(at('20:00')), breaks: [{ id: 'b', start: toIso(at('12:00')), end: toIso(at('13:00')) }] }); for (const h of ['08:15', '12:00', '13:00', '20:15', '20:30']) eq(keys(s, at(h)), []); });
 console.log(`\n${pass} trecute, ${fail} eșuate`); process.exit(fail ? 1 : 0);

@@ -3,7 +3,12 @@ name: Notificări WorkTrack
 on:
   schedule:
     - cron: '*/5 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Trimite o notificare de test administratorului'
+        type: boolean
+        default: false
 
 concurrency:
   group: reminders
@@ -12,7 +17,7 @@ concurrency:
 jobs:
   send:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +32,5 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           TZ: UTC
           WT_DEBUG: '1'
+          WT_LOOP_MIN: ${{ github.event_name == 'schedule' && '58' || '0' }}
+          WT_TEST_PUSH: ${{ inputs.test && '1' || '' }}

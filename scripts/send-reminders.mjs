@@ -9,7 +9,7 @@ const DRY = process.argv.includes('--dry');
 let admin, db;
 const SITE = process.env.SITE_URL || 'https://ema22222222.github.io/worktrack/';
 const TYPES = { employer: 'employers', contract: 'contracts', activity: 'activities', rate: 'rates', policy: 'policies', norm: 'norms', shift: 'shifts', production: 'production', holiday: 'holidays', absence: 'absences', comp: 'compEntries', payment: 'payments', confirmation: 'confirmations', expense: 'expenses', location: 'locations' };
-const DEF = { enabled: true, startLateMin: 15, breakLongMin: 75, overNorm: true, endLateMin: 15, noProduction: true, incomplete: true, eveningMissing: true };
+const DEF = { enabled: true, breakPrompt: true, startLateMin: 15, breakLongMin: 75, overNorm: true, endLateMin: 15, noProduction: true, incomplete: true, eveningMissing: true };
 
 export function evaluate(state, now) {
   const s = state.settings || {};
@@ -42,7 +42,17 @@ export function evaluate(state, now) {
   if (open) {
     const c = R.calc.get(open.id);
     const brk = (open.breaks || []).find((b) => !b.deleted && !b.end);
-    if (brk && now - toMs(brk.start) > rc.breakLongMin * 60000) add(`break|${brk.id}`, 'Pauza este încă deschisă', `Pauza a început la ${localTime(toMs(brk.start), tz)}. Ai uitat să apeși TERMINĂ PAUZA?`);
+    const bMin = Number(sch.breakMin) || 0;
+    const anyBreak = (open.breaks || []).some((b) => !b.deleted);
+    const dOpen = c?.date || today;
+    // Pauza: la ora pauzei din program (ex. 12:00), dacă ziua e pornită și încă n-ai luat pauză.
+    if (rc.breakPrompt !== false && bMin > 0 && sch.breakStart && !anyBreak) {
+      const bs = zonedToUtc(dOpen, sch.breakStart, tz);
+      if (now >= bs && now < bs + 3 * 3600000) add(`pauza|${dOpen}`, `E ${sch.breakStart} – ora pauzei`, 'Dacă ai intrat în pauză, apasă PAUZĂ în WorkTrack.');
+    }
+    // Pauza deschisă: după durata pauzei din program (ex. 1h) sau cel târziu după limita setată.
+    const brkLimit = (bMin > 0 ? Math.min(bMin, rc.breakLongMin) : rc.breakLongMin) * 60000;
+    if (brk && now - toMs(brk.start) >= brkLimit) add(`break|${brk.id}`, 'Gata pauza?', `Pauza a început la ${localTime(toMs(brk.start), tz)}. Când reîncepi lucrul, apasă TERMINĂ PAUZA.`);
     if (rc.overNorm && c?.dailyNormMin != null && c.t.effMin > c.dailyNormMin) add(`over|${c.date}`, 'Ai trecut de norma zilnică', `Ai lucrat ${fmtDur(c.t.effMin)}. De acum orele sunt extra.`);
     const endAt = zonedToUtc(c?.date || today, end, tz) + rc.endLateMin * 60000;
     if (now >= endAt) add(`end|${c?.date || today}`, 'Ai uitat să închei ziua?', `Ziua e pornită de la ${localTime(toMs(open.start), tz)}. Apasă TERMINĂ MUNCA sau corectează ora.`);
@@ -63,11 +73,32 @@ async function loadState(uid) {
 }
 
 async function main() {
-  const SA = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!SA) { console.log('Lipsește secretul FIREBASE_SERVICE_ACCOUNT – nu se trimit notificări.'); return; }
+  const SA0 = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!SA0) { console.log('Lipsește secretul FIREBASE_SERVICE_ACCOUNT – nu se trimit notificări.'); return; }
   admin = (await import('firebase-admin')).default;
-  admin.initializeApp({ credential: admin.credential.cert(JSON.parse(SA)) });
+  admin.initializeApp({ credential: admin.credential.cert(JSON.parse(SA0)) });
   db = admin.firestore();
+  if (process.env.WT_TEST_PUSH) { await testPush(); return; }
+  // GitHub pornește rularea programată cam o dată pe oră; în interiorul ei verificăm la fiecare 5 minute.
+  const loopMin = Number(process.env.WT_LOOP_MIN || 0);
+  const t0 = Date.now();
+  do {
+    try { await tick(); } catch (e) { console.error('eroare la verificare', e?.message || e); }
+    if (Date.now() - t0 + 5 * 60000 > loopMin * 60000) break;
+    await new Promise((r) => setTimeout(r, 5 * 60000));
+  } while (true);
+}
+
+async function testPush() {
+  const snap = await db.collectionGroup('push').get();
+  const toks = snap.docs.filter((d) => ADMIN_UIDS.includes(d.ref.parent.parent?.id)).map((d) => d.get('token'));
+  console.log(`Test: ${toks.length} dispozitive.`);
+  if (!toks.length) return;
+  const res = await admin.messaging().sendEachForMulticast({ tokens: toks, webpush: { notification: { title: 'Test WorkTrack', body: 'Notificările funcționează. Dacă vezi mesajul ăsta, totul e în regulă.', icon: `${SITE}icons/icon-192.png`, tag: 'test' }, fcmOptions: { link: `${SITE}#azi` } } });
+  res.responses.forEach((x, i) => console.log(`dispozitiv ${i + 1}:`, x.success ? 'trimis' : 'eroare ' + (x.error?.code || '')));
+}
+
+async function tick() {
   const now = Date.now();
   const tokSnap = await db.collectionGroup('push').get();
   const byUser = new Map();
@@ -97,6 +128,7 @@ async function main() {
         tokens: toks.map((t) => t.token),
         webpush: { notification: { title: r.title, body: r.body, icon: `${SITE}icons/icon-192.png`, tag: r.key }, fcmOptions: { link: `${SITE}${r.link || '#azi'}` } },
       });
+      console.log(`  trimis: ${res.successCount}/${toks.length}`);
       res.responses.forEach((x, i) => {
         const c = x.error?.code || '';
         if (c.includes('registration-token-not-registered') || c.includes('invalid-registration-token') || c.includes('invalid-argument')) toks[i].ref.delete().catch(() => {});
