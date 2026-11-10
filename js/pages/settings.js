@@ -78,9 +78,11 @@ async function editReminders(app) {
     title: 'Remindere',
     fields: [
       { name: 'enabled', label: 'Remindere active', type: 'checkbox', value: r.enabled, full: true },
-      { name: 'startLateMin', label: 'Am uitat să încep: după câte minute de la ora obișnuită', type: 'number', value: r.startLateMin },
+      { name: 'fixedTimes', label: 'La ora exactă din program: începe programul (08:00), începe pauza (12:00), reîncepe lucrul (13:00), închide programul (20:00)', type: 'checkbox', value: r.fixedTimes !== false, full: true },
+      { name: 'breakPrompt', label: 'Memento la ora pauzei', type: 'checkbox', value: r.breakPrompt !== false, full: true },
+      { name: 'startLateMin', label: 'Dacă nu e la ora exactă: am uitat să încep, după câte minute', type: 'number', value: r.startLateMin },
       { name: 'breakLongMin', label: 'Am uitat să închei pauza: după câte minute', type: 'number', value: r.breakLongMin },
-      { name: 'endLateMin', label: 'Am uitat să închei ziua: minute după ora obișnuită de terminare', type: 'number', value: r.endLateMin },
+      { name: 'endLateMin', label: 'Dacă nu e la ora exactă: am uitat să închei ziua, după câte minute', type: 'number', value: r.endLateMin },
       { name: 'overNorm', label: 'Am depășit programul normal', type: 'checkbox', value: r.overNorm },
       { name: 'noProduction', label: 'Nu am înregistrat producția', type: 'checkbox', value: r.noProduction },
       { name: 'incomplete', label: 'Am înregistrări incomplete', type: 'checkbox', value: r.incomplete },

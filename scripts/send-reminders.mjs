@@ -9,7 +9,7 @@ const DRY = process.argv.includes('--dry');
 let admin, db;
 const SITE = process.env.SITE_URL || 'https://ema22222222.github.io/worktrack/';
 const TYPES = { employer: 'employers', contract: 'contracts', activity: 'activities', rate: 'rates', policy: 'policies', norm: 'norms', shift: 'shifts', production: 'production', holiday: 'holidays', absence: 'absences', comp: 'compEntries', payment: 'payments', confirmation: 'confirmations', expense: 'expenses', location: 'locations' };
-const DEF = { enabled: true, breakPrompt: true, startLateMin: 15, breakLongMin: 75, overNorm: true, endLateMin: 15, noProduction: true, incomplete: true, eveningMissing: true };
+const DEF = { enabled: true, fixedTimes: true, breakPrompt: true, startLateMin: 15, breakLongMin: 75, overNorm: true, endLateMin: 15, noProduction: true, incomplete: true, eveningMissing: true };
 
 export function evaluate(state, now) {
   const s = state.settings || {};
@@ -34,8 +34,8 @@ export function evaluate(state, now) {
   if (process.env.WT_DEBUG) console.log('diagnostic', JSON.stringify({ today, ora: localTime(now, tz), tz, zi_de_lucru: workday, ture_azi: todays.length, tura_deschisa: !!open, absent, sarbatoare: !!hol, start, end }));
 
   if (!open && !todays.length && workday && !absent && !hol) {
-    const late = zonedToUtc(today, start, tz) + rc.startLateMin * 60000;
-    if (now >= late && now < late + 4 * 3600000) add(`start|${today}`, 'Ai uitat să începi programul?', `Programul tău începe la ${start}. Apasă START sau trece ora corectă.`);
+    const late = zonedToUtc(today, start, tz) + (rc.fixedTimes ? 0 : rc.startLateMin) * 60000;
+    if (now >= late && now < late + 4 * 3600000) add(`start|${today}`, `E ${start} – începe programul`, 'Apasă START MUNCĂ în WorkTrack când începi lucrul.');
     const evening = zonedToUtc(today, end, tz) + 30 * 60000;
     if (rc.eveningMissing && now >= evening && now < evening + 2 * 3600000) add(`missing|${today}`, 'Nu ai trecut ziua de azi', 'Deschide WorkTrack și pune programul de azi (sau marchează zi liberă).');
   }
@@ -48,14 +48,19 @@ export function evaluate(state, now) {
     // Pauza: la ora pauzei din program (ex. 12:00), dacă ziua e pornită și încă n-ai luat pauză.
     if (rc.breakPrompt !== false && bMin > 0 && sch.breakStart && !anyBreak) {
       const bs = zonedToUtc(dOpen, sch.breakStart, tz);
-      if (now >= bs && now < bs + 3 * 3600000) add(`pauza|${dOpen}`, `E ${sch.breakStart} – ora pauzei`, 'Dacă ai intrat în pauză, apasă PAUZĂ în WorkTrack.');
+      if (now >= bs && now < bs + 3 * 3600000) add(`pauza|${dOpen}`, `E ${sch.breakStart} – începe pauza`, 'Apasă PAUZĂ în WorkTrack.');
     }
-    // Pauza deschisă: după durata pauzei din program (ex. 1h) sau cel târziu după limita setată.
-    const brkLimit = (bMin > 0 ? Math.min(bMin, rc.breakLongMin) : rc.breakLongMin) * 60000;
-    if (brk && now - toMs(brk.start) >= brkLimit) add(`break|${brk.id}`, 'Gata pauza?', `Pauza a început la ${localTime(toMs(brk.start), tz)}. Când reîncepi lucrul, apasă TERMINĂ PAUZA.`);
+    // Pauza deschisă: la ora de sfârșit a pauzei din program (ex. 13:00); altfel după durata pauzei.
+    if (brk) {
+      const bStart = toMs(brk.start);
+      const planEnd = bMin > 0 && sch.breakStart ? zonedToUtc(dOpen, sch.breakStart, tz) + bMin * 60000 : null;
+      const due = rc.fixedTimes && planEnd && bStart < planEnd ? planEnd
+        : bStart + (bMin > 0 ? Math.min(bMin, rc.breakLongMin) : rc.breakLongMin) * 60000;
+      if (now >= due) add(`break|${brk.id}`, `E ${localTime(due, tz)} – reîncepe lucrul`, `Pauza a început la ${localTime(bStart, tz)}. Apasă TERMINĂ PAUZA în WorkTrack.`);
+    }
     if (rc.overNorm && c?.dailyNormMin != null && c.t.effMin > c.dailyNormMin) add(`over|${c.date}`, 'Ai trecut de norma zilnică', `Ai lucrat ${fmtDur(c.t.effMin)}. De acum orele sunt extra.`);
-    const endAt = zonedToUtc(c?.date || today, end, tz) + rc.endLateMin * 60000;
-    if (now >= endAt) add(`end|${c?.date || today}`, 'Ai uitat să închei ziua?', `Ziua e pornită de la ${localTime(toMs(open.start), tz)}. Apasă TERMINĂ MUNCA sau corectează ora.`);
+    const endAt = zonedToUtc(c?.date || today, end, tz) + (rc.fixedTimes ? 0 : rc.endLateMin) * 60000;
+    if (now >= endAt) add(`end|${c?.date || today}`, `E ${end} – închide programul`, `Ziua e pornită de la ${localTime(toMs(open.start), tz)}. Apasă TERMINĂ MUNCA în WorkTrack.`);
   }
   return out;
 }
