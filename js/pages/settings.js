@@ -78,8 +78,10 @@ async function editReminders(app) {
     title: 'Remindere',
     fields: [
       { name: 'enabled', label: 'Remindere active', type: 'checkbox', value: r.enabled, full: true },
-      { name: 'fixedTimes', label: 'La ora exactă din program: începe programul (08:00), începe pauza (12:00), reîncepe lucrul (13:00), închide programul (20:00)', type: 'checkbox', value: r.fixedTimes !== false, full: true },
+      { name: 'fixedTimes', label: 'După ora din program: începe programul (08:00), începe pauza (12:00), reîncepe lucrul (13:00), se termină programul (20:00)', type: 'checkbox', value: r.fixedTimes !== false, full: true },
       { name: 'breakPrompt', label: 'Memento la ora pauzei', type: 'checkbox', value: r.breakPrompt !== false, full: true },
+      { name: 'leadMin', label: 'Notificarea vine cu câte minute înainte (0 = la ora exactă)', type: 'number', value: r.leadMin ?? 5 },
+      { name: 'snapMin', label: 'Butoanele trec ora din program dacă apeși cu cel mult atâtea minute înainte/după (0 = ora exactă apăsată)', type: 'number', value: app.settings().snapMin ?? 10 },
       { name: 'startLateMin', label: 'Dacă nu e la ora exactă: am uitat să încep, după câte minute', type: 'number', value: r.startLateMin },
       { name: 'breakLongMin', label: 'Am uitat să închei pauza: după câte minute', type: 'number', value: r.breakLongMin },
       { name: 'endLateMin', label: 'Dacă nu e la ora exactă: am uitat să închei ziua, după câte minute', type: 'number', value: r.endLateMin },
@@ -90,7 +92,8 @@ async function editReminders(app) {
     ],
   });
   if (!vals) return;
-  app.saveSettings({ reminders: vals }); toast('Remindere salvate.'); app.refresh();
+  const { snapMin, ...rem } = vals;
+  app.saveSettings({ reminders: rem, snapMin: Math.max(0, Math.min(30, Number(snapMin) || 0)) }); toast('Remindere salvate.'); app.refresh();
 }
 
 // ---------- Jurnal de audit ----------

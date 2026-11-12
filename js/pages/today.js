@@ -2,7 +2,7 @@
 import { esc, icon, toast, openDialog, pill } from '../ui.js';
 import { fmtDur, fmtMoney, fmtDate, localTime, localDate, toMs, weekStart, addDays, monthStart, monthEnd, zonedToUtc, fmtNum } from '../util.js';
 import { shiftStatus, totalsFor, validateAction, otBank } from '../calc.js';
-import { startWork, breakStart, breakEnd, switchActivity, endWork, addNote, getLocation, normsFor } from '../actions.js';
+import { startWork, breakStart, breakEnd, switchActivity, endWork, addNote, getLocation, normsFor, snapTime, snapNote } from '../actions.js';
 import { setupWizard, editProduction, editShift, standardFor } from '../editors.js';
 import { activeReminders, dismissReminder } from '../reminders.js';
 import { fmtHM, applyStandard, dayDialog } from './month.js';
@@ -151,11 +151,14 @@ export function timelineHtml(app, c) {
     ${c.t.breakMin ? `<span><span class="swatch" style="background:var(--pause);opacity:.55"></span>Pauze ${fmtDur(c.t.breakMin)}</span>` : ''}</div></div>`;
 }
 
-async function pickActivity(app, { title, current, withTime = true, startLabel }) {
+async function pickActivity(app, { title, current, withTime = true, startLabel, snapKind = null }) {
   const acts = app.activities();
   const locs = app.store.list('location');
-  const nowT = localTime(Date.now(), app.tz);
-  const body = `${withTime ? `<div class="fgrid"><label class="f">Ora<input type="time" id="pa-time" value="${nowT}"><span class="help">Lasă ora curentă sau corectează dacă ai uitat să apeși.</span></label>
+  const now = Date.now();
+  const def = snapKind ? snapTime(app, now, snapKind) : now;
+  const nowT = localTime(def, app.tz);
+  const help = def !== now ? `Ora din program (acum e ${localTime(now, app.tz)}). O poți schimba.` : 'Lasă ora curentă sau corectează dacă ai uitat să apeși.';
+  const body = `${withTime ? `<div class="fgrid"><label class="f">Ora<input type="time" id="pa-time" value="${nowT}"><span class="help">${help}</span></label>
     <div class="f full"><span class="label">Unde lucrezi azi?</span><div id="pa-place"></div><span class="tiny muted" id="pa-gps"></span></div></div>` : ''}
     <div class="choicegrid">${acts.map((a) => `<button data-a="${a.id}" class="${a.id === current ? 'cur' : ''}"><span class="swatch" style="background:${esc(a.color || 'var(--accent)')}"></span>${esc(a.name)}</button>`).join('')}
       ${startLabel ? `<button data-a="">${esc(startLabel)}</button>` : ''}</div>
@@ -188,14 +191,16 @@ async function pickActivity(app, { title, current, withTime = true, startLabel }
 function atToday(app, hhmm) {
   if (hhmm === localTime(Date.now(), app.tz)) return Date.now();
   let t = zonedToUtc(app.today(), hhmm, app.tz);
-  if (t > Date.now() + 60000) t = zonedToUtc(addDays(app.today(), -1), hhmm, app.tz);
+  // Câteva minute în viitor sunt permise (ora din program, ex. 08:00 apăsat la 07:56); mai mult = ieri.
+  if (t > Date.now() + 30 * 60000) t = zonedToUtc(addDays(app.today(), -1), hhmm, app.tz);
   return t;
 }
 
-async function timeDialog(app, title, { note = true, extra = '' } = {}) {
+async function timeDialog(app, title, { note = true, extra = '', def = Date.now() } = {}) {
+  const now = Date.now();
   return openDialog({
     title,
-    body: `${extra}<div class="fgrid"><label class="f">Ora<input type="time" id="td-time" value="${localTime(Date.now(), app.tz)}"></label>
+    body: `${extra}<div class="fgrid"><label class="f">Ora<input type="time" id="td-time" value="${localTime(def, app.tz)}">${def !== now ? `<span class="help">Ora din program (acum e ${localTime(now, app.tz)}). O poți schimba.</span>` : ''}</label>
       ${note ? '<label class="f full">Observație (opțional)<input type="text" id="td-note"></label>' : ''}</div>`,
     actions: [{ label: 'Renunță', value: null }, { label: 'Confirmă', cls: 'btn-primary', onClick: (api) => ({ at: atToday(app, api.el.querySelector('#td-time').value || localTime(Date.now(), app.tz)), note: api.el.querySelector('#td-note')?.value.trim() || '' }) }],
   });
@@ -208,13 +213,14 @@ async function handle(app, act, { focus, open }) {
       case 'start': {
         const last = [...app.store.list('shift')].sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0];
         const lastAct = last?.segments?.filter((g) => !g.deleted).slice(-1)[0]?.activityId;
-        const r = await pickActivity(app, { title: 'START MUNCĂ – cu ce începi?', current: lastAct, startLabel: 'Fără activitate (aleg mai târziu)' });
+        const pressed = Date.now();
+        const r = await pickActivity(app, { title: 'START MUNCĂ – cu ce începi?', current: lastAct, startLabel: 'Fără activitate (aleg mai târziu)', snapKind: 'start' });
         if (!r) return;
-        startWork(app, { ...r, geo: r.geo || null });
+        startWork(app, { ...r, geo: r.geo || null, pressedAt: pressed });
         done(`Muncă pornită la ${localTime(r.at, app.tz)}.`); break;
       }
-      case 'breakStart': { breakStart(app); done(`Pauză începută la ${localTime(Date.now(), app.tz)}.`); break; }
-      case 'breakEnd': { breakEnd(app); done(`Pauză terminată la ${localTime(Date.now(), app.tz)}.`); break; }
+      case 'breakStart': { const x = breakStart(app, { snap: true }); done(`Pauză începută la ${localTime(x.at, app.tz)}${snapNote(app, x.pressed, x.at)}.`); break; }
+      case 'breakEnd': { const x = breakEnd(app, { snap: true }); done(`Pauză terminată la ${localTime(x.at, app.tz)}${snapNote(app, x.pressed, x.at)}.`); break; }
       case 'switch': {
         const cur = (open.segments || []).find((g) => !g.deleted && !g.end);
         const r = await pickActivity(app, { title: 'Schimbă activitatea', current: cur?.activityId });
@@ -228,12 +234,13 @@ async function handle(app, act, { focus, open }) {
         const c = app.calc().calc.get(open.id);
         const hasNorm = (c?.normEvals || []).length > 0;
         const noProd = !app.store.list('production').some((p) => p.date === c?.date);
-        const r = await timeDialog(app, 'TERMINĂ MUNCA', {
+        const pressed = Date.now();
+        const r = await timeDialog(app, 'TERMINĂ MUNCA', { def: snapTime(app, pressed, 'end', c?.date),
           extra: `<p>Timp efectiv până acum: <b>${fmtDur(c?.t.effMin || 0)}</b>, pauze ${fmtDur(c?.t.breakMin || 0)}.</p>${c?.t.openBreak ? '<p class="note warn small">Pauza deschisă va fi închisă la ora terminării.</p>' : ''}${hasNorm && noProd ? '<p class="note warn small"><b>Nu ai înregistrat producția</b> pentru azi. O poți adăuga și după.</p>' : ''}`,
         });
         if (!r) return;
         const geo = await getLocation(app);
-        endWork(app, { ...r, geo });
+        endWork(app, { ...r, geo, pressedAt: pressed });
         done(`Zi încheiată la ${localTime(r.at, app.tz)}. Regulile de calcul ale zilei au fost salvate.`); break;
       }
       case 'note': {
