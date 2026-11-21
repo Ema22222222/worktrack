@@ -189,7 +189,7 @@ async function pickActivity(app, { title, current, withTime = true, startLabel, 
 
 /** Ora aleasă azi; dacă e în viitor cu peste 1 minut, înseamnă ieri (tură peste miezul nopții). */
 function atToday(app, hhmm) {
-  if (hhmm === localTime(Date.now(), app.tz)) return Date.now();
+  if (hhmm === localTime(Date.now(), app.tz)) return Math.round(Date.now() / 60000) * 60000;
   let t = zonedToUtc(app.today(), hhmm, app.tz);
   // Câteva minute în viitor sunt permise (ora din program, ex. 08:00 apăsat la 07:56); mai mult = ieri.
   if (t > Date.now() + 30 * 60000) t = zonedToUtc(addDays(app.today(), -1), hhmm, app.tz);

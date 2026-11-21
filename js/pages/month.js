@@ -3,7 +3,7 @@
 import { esc, icon, openDialog, toast, confirmDialog, emptyState } from '../ui.js';
 import { fmtDate, dateRange, monthEnd, dowOf, dayName, monthName, pad, zonedToUtc, toIso, toMs, localTime, localDate, addDays, fmtMoney, uid } from '../util.js';
 import { totalsFor, shiftOverlaps, holidayFor, otBank } from '../calc.js';
-import { freezeRules } from '../actions.js';
+import { freezeRules, normalizeShift } from '../actions.js';
 import { editShift, standardFor, editStandard, setupWizard, hmToMin, editPayment } from '../editors.js';
 import { ABSENCE_TYPES, editOtPay, dayOffFromOt } from './leave.js';
 import { defaultPlace, bindPlaceChips } from '../places.js';
@@ -354,6 +354,8 @@ export async function dayDialog(app, date) {
           segments: [...(sh ? (sh.segments || []).filter((z) => z.deleted) : []), ...(activityId ? [{ id: segId, activityId, start: toIso(b.start), end: toIso(b.end) }] : [])],
           notes: el.querySelector('#dd-note').value, locationId: place || null, hoursOnly: false,
         };
+        const nz = normalizeShift(app, { ...patch, id: sh?.id || 'nou' });
+        if (nz) { const { id: _i, original: _o, ...rest } = nz; Object.assign(patch, rest); }
         if (shiftOverlaps(app.state(), { ...patch, id: sh?.id }).length) return err('Se suprapune cu altă zi de lucru (ex. o tură de noapte din ziua anterioară).');
         if (!sh) patch.frozen = freezeRules(app.state(), patch, date);
         app.store.put('shift', patch, { reason: sh ? 'Corectare din pontajul lunar' : 'Adăugat din pontajul lunar', action: sh ? 'corectare' : 'adăugare', undoLabel: 'Zi' });

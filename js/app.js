@@ -153,6 +153,7 @@ async function boot() {
   setTimeout(() => checkReminders(app), 4000);
   setInterval(() => app.store.flush(), 30000);
   import('./backup.js').then((m) => m.autoBackup(app)).catch(() => {});
+  import('./normalize.js').then((m) => m.normalizeOnce(app)).catch((e) => console.warn('normalize', e));
 }
 
 let renderTimer = null;

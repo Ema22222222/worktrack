@@ -17,6 +17,9 @@ export function buildHoja(app, month, { employerId } = {}) {
   const from = month + '-01', to = monthEnd(from);
   const [y, m] = month.split('-').map(Number);
   const rows = []; let n = 0;
+  // Zilele fără loc trecut primesc locul obișnuit (ultimul folosit sau primul din listă).
+  const lastLoc = app.settings().lastLocationId && app.store.get(app.settings().lastLocationId);
+  const fallbackPlace = (lastLoc && !lastLoc.deleted ? lastLoc.name : app.store.list('location')[0]?.name) || '';
   const places = new Set();
   let totMin = 0, extMin = 0, pauMin = 0;
   for (const d of dateRange(from, to)) {
@@ -38,7 +41,7 @@ export function buildHoja(app, month, { employerId } = {}) {
     const hol = shifts.flatMap((c) => c.slices).find((s) => s.holiday);
     const horario = shifts.some((c) => c.shift.hoursOnly) ? (hol ? 'FIESTA' : '—')
       : shifts.flatMap((c) => c.t.effIntervals.map(([s, e]) => `${localTime(s, app.tz)}–${localTime(e, app.tz)}`)).join(' | ');
-    const lugar = [...new Set(shifts.map((c) => c.location?.name).filter(Boolean))].join(', ');
+    const lugar = [...new Set(shifts.map((c) => c.location?.name || fallbackPlace).filter(Boolean))].join(', ');
     if (lugar) places.add(lugar);
     rows.push({ n: ++n, fecha, dia: DIAS[dowOf(d)] + (hol ? ' (FIESTA)' : ''), horario, pausa: br ? h(br) : '', total: h(eff), extra: ot ? h(ot) : '', lugar });
   }
@@ -105,7 +108,9 @@ export async function exportHoja(app, month, kind = 'pdf') {
   if (!(await ensureName(app))) return;
   const rep = buildHoja(app, month);
   if (!rep.sections[0].rows.length) { toast('Nu ai ore înregistrate în această lună.', { bad: true }); return; }
-  const name = `horas-${month}`;
+  const [yy, mm] = month.split('-').map(Number);
+  const worker = (app.settings().workerName || '').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ');
+  const name = `${worker ? worker + ' ' : ''}horas ${MESES[mm - 1].toLowerCase()} ${yy}`;
   try {
     if (kind === 'pdf') await app.download(`${name}.pdf`, await toPDF(rep));
     else await app.download(`${name}.xlsx`, await toXLSX(rep));

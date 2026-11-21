@@ -36,11 +36,53 @@ export function planTimes(app, date) {
 }
 /** Dacă ai apăsat aproape de ora din program (± câteva minute, din Setări), se trece ora din program. */
 export function snapTime(app, at, kind, date = localDate(at, app.tz)) {
-  const tol = Number(app.settings().snapMin ?? 10);
+  at = Math.round(at / 60000) * 60000; // fără secunde
+  const tol = Number(app.settings().snapMin ?? 30);
   if (!(tol > 0)) return at;
   const p = planTimes(app, date)[kind];
   return p != null && Math.abs(at - p) <= tol * 60000 ? p : at;
 }
+/**
+ * Potrivește toată ziua pe programul tău: fără secunde, iar orele aflate la cel mult `snapMin` minute
+ * de ora din program (început, pauză, sfârșit pauză, final) devin ora din program.
+ * Pauza începută la altă oră se termină după durata pauzei din program, dacă e aproape.
+ * Întoarce modificările (patch) sau null dacă nu e nimic de schimbat. Orele originale se păstrează în `original`.
+ */
+export function normalizeShift(app, sh) {
+  if (!sh || sh.deleted || !sh.start || sh.hoursOnly) return null;
+  const tol = Number(app.settings().snapMin ?? 30) * 60000;
+  const date = sh.date || localDate(Date.parse(sh.start), app.tz);
+  const P = planTimes(app, date);
+  const r = (iso) => (iso ? Math.round(Date.parse(iso) / 60000) * 60000 : null);
+  const near = (t, p) => tol > 0 && p != null && t != null && Math.abs(t - p) <= tol;
+  const s0 = r(sh.start), e0 = r(sh.end);
+  let start = near(s0, P.start) ? P.start : s0;
+  let end = near(e0, P.end) ? P.end : e0;
+  if (end != null && end <= start) { start = s0; end = e0; }
+  const breaks = (sh.breaks || []).map((b) => {
+    if (b.deleted) return b;
+    let bs = r(b.start), be = r(b.end);
+    if (near(bs, P.breakStart)) bs = P.breakStart;
+    if (be != null && P.breakStart != null) {
+      const target = bs === P.breakStart ? P.breakEnd : bs + (P.breakEnd - P.breakStart);
+      if (near(be, target)) be = target;
+    }
+    bs = Math.max(bs, start); if (end != null) bs = Math.min(bs, end);
+    if (be != null) { be = Math.max(be, bs); if (end != null) be = Math.min(be, end); }
+    return { ...b, start: toIso(bs), end: be != null ? toIso(be) : b.end };
+  });
+  const segments = (sh.segments || []).map((g) => (g.deleted ? g : {
+    ...g,
+    start: g.start === sh.start ? toIso(start) : toIso(Math.max(r(g.start), start)),
+    end: g.end ? (g.end === sh.end && end != null ? toIso(end) : toIso(end != null ? Math.min(r(g.end), end) : r(g.end))) : g.end,
+  }));
+  const patch = { id: sh.id, start: toIso(start), end: end != null ? toIso(end) : sh.end, breaks, segments };
+  const same = patch.start === sh.start && patch.end === sh.end && JSON.stringify(breaks) === JSON.stringify(sh.breaks || []) && JSON.stringify(segments) === JSON.stringify(sh.segments || []);
+  if (same) return null;
+  if (!sh.original) patch.original = { start: sh.start, end: sh.end, breaks: (sh.breaks || []).filter((b) => !b.deleted).map((b) => ({ start: b.start, end: b.end })) };
+  return patch;
+}
+
 export const snapNote = (app, pressed, used) => (Math.abs(pressed - used) >= 60000 ? ` (ora din program; ai apăsat la ${localTime(pressed, app.tz)})` : '');
 
 function fail(msg) { const e = new Error(msg); e.user = true; throw e; }
@@ -50,6 +92,8 @@ export function startWork(app, { activityId, at = Date.now(), note = '', locatio
   const err = validateAction(st, 'start'); if (err) fail(err);
   const contract = app.store.get(contractId) || app.activeContract();
   if (!contract) fail('Configurează mai întâi angajatorul și contractul.');
+  at = Math.round(at / 60000) * 60000;
+  if (!locationId) { const id = app.settings().lastLocationId; locationId = (id && app.store.get(id) && !app.store.get(id).deleted) ? id : (app.store.list('location')[0]?.id || null); }
   const iso = toIso(at);
   const shift = {
     employerId: contract.employerId, contractId: contract.id, date: localDate(at, app.tz), start: iso, end: null,
@@ -65,6 +109,7 @@ export function breakStart(app, { at = Date.now(), note = '', snap = false } = {
   const err = validateAction(st, 'breakStart'); if (err) fail(err);
   const sh = openShift(st);
   const pressed = at;
+  at = Math.round(at / 60000) * 60000;
   if (snap) at = Math.max(snapTime(app, at, 'breakStart', localDate(Date.parse(sh.start), app.tz)), Date.parse(sh.start));
   const b = { id: uid('brk'), start: toIso(at), end: null, note, ...(Math.abs(pressed - at) >= 60000 ? { pressedStart: toIso(pressed) } : {}) };
   app.store.put('shift', { id: sh.id, breaks: [...(sh.breaks || []), b] }, { action: 'ÎNCEPE PAUZĂ', undoLabel: 'Începe pauză' });
@@ -77,10 +122,11 @@ export function breakEnd(app, { at = Date.now(), snap = false } = {}) {
   const sh = openShift(st);
   const pressed = at;
   const ob = sh.breaks.find((b) => !b.deleted && !b.end);
+  at = Math.round(at / 60000) * 60000;
   if (snap) {
     // Pauza începută la ora din program → se termină la ora din program (13:00);
     // începută mai târziu → se termină după durata pauzei din program (1h), dacă ai apăsat aproape de ea.
-    const tol = Number(app.settings().snapMin ?? 10) * 60000;
+    const tol = Number(app.settings().snapMin ?? 30) * 60000;
     const P = planTimes(app, localDate(Date.parse(sh.start), app.tz));
     const st0 = Date.parse(ob.start);
     if (tol > 0 && P.breakStart != null) {
@@ -117,6 +163,8 @@ export function endWork(app, { at = Date.now(), note, locationId = null, geo = n
   const patch = { id: sh.id, end: iso, breaks, segments, endLoc: { locationId, geo }, frozen: freezeRules(st, sh, date) };
   if (pressedAt && Math.abs(pressedAt - Date.parse(iso)) >= 60000) patch.endPressed = toIso(pressedAt);
   if (note) patch.notes = (sh.notes ? sh.notes + '\n' : '') + note;
+  const norm = normalizeShift(app, { ...sh, ...patch });
+  if (norm) Object.assign(patch, norm);
   return app.store.put('shift', patch, { action: 'TERMINĂ MUNCA', undoLabel: 'Termină munca' });
 }
 
